@@ -25,7 +25,7 @@ https://melodeas.net, served over https, so the microphone works in every browse
 3. The take is converted and starts looping. Tap the next instrument and repeat. Recording again into an instrument adds to what is already there; "Clear" empties it and "Undo last change" in the menu steps back.
 4. "Export MIDI" in the menu writes a `.mid` with one track per instrument, tempo and velocities.
 
-All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) under the board; the others are grey behind it. Tap the selected instrument again to see everything in colour.
+All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) between the board and the record bar; the others are grey behind it. Tap the selected instrument again to see everything in colour. An instrument you leave with nothing recorded in it is removed again.
 
 What to perform:
 

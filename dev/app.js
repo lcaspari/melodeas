@@ -96,7 +96,9 @@ function download(bytes,name,type){const a=h('a',{href:URL.createObjectURL(new B
 function mixDefaults(tr){const I=INST[tr.inst];tr.eq={hp:I.eq[0],lp:I.eq[1]};tr.rev=I.rev;}
 function newTrack(inst){const tr={id:S.nextId++,inst,kit:'punch',vol:0.8,mute:false,solo:false,dyn:true,octave:INST[inst].octave||0,eq:null,rev:0,eqOpen:false,lenBeats:0,notes:[],audio:null,peaks:null,prev:null,nodes:null,cv:null,rects:[],ev:null,buf:null,geom:null,dragRange:null,dragged:0};
   mixDefaults(tr);return tr;}
-function addTrack(inst){const tr=newTrack(inst);S.tracks.push(tr);S.sel=tr.id;invalidate();renderTracks();preview(tr);setStatus(INST[inst].hint+' Press the red button when you are ready.',6000);}
+function pruneEmpty(){ // an instrument left behind with nothing in it is taken off the board
+  for(const t of S.tracks.slice())if(t.id!==S.sel&&!hasContent(t)&&R.track!==t){dropTrackNodes(t);S.tracks=S.tracks.filter(x=>x!==t);if(S.lastTake===t.id)S.lastTake=null;}}
+function addTrack(inst){const tr=newTrack(inst);S.tracks.push(tr);S.sel=tr.id;pruneEmpty();invalidate();renderTracks();preview(tr);setStatus(INST[inst].hint+' Press the red button when you are ready.',6000);}
 function setInst(tr,inst){if(tr.octave===(INST[tr.inst].octave||0))tr.octave=INST[inst].octave||0;tr.inst=inst;mixDefaults(tr);applyMix(tr);invalidate();renderTracks();preview(tr);}
 function dropTrackNodes(tr){if(ctx)stopFrozen(tr);tr.frozen=null;clearTimeout(tr.fzTimer);if(tr.nodes){for(const k of ['vol','rev','dly'])try{tr.nodes[k].disconnect();}catch(e){}tr.nodes=null;}tr.buf=null;}
 function removeTrack(tr){if(R.track===tr)cancelRec();dropTrackNodes(tr);S.tracks=S.tracks.filter(t=>t!==tr);if(S.sel===tr.id)S.sel=null;invalidate();renderTracks();}
@@ -705,7 +707,7 @@ function drumAt(G,y){ // the drum row under the pointer, kept to the drums this 
   const i=clamp(Math.floor((y-G.y0)/G.rh),0,G.rows.length-1);let best=null,bd=99;
   for(const r of G.allowed){const d=Math.abs(G.rows.indexOf(r)-i);if(d<bd){bd=d;best=r;}}return best;}
 function selectTrack(tr){ // null, or the track that is already selected, goes back to the view of everything
-  if(R.state!=='idle')return;S.sel=tr&&S.sel!==tr.id?tr.id:null;statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
+  if(R.state!=='idle')return;S.sel=tr&&S.sel!==tr.id?tr.id:null;pruneEmpty();invalidate();statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
 function addNoteAt(tr,e){
   const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G||y<G.y0||y>G.hh)return;
   keep(tr);if(!tr.lenBeats)tr.lenBeats=G.LB;
@@ -782,7 +784,6 @@ function renderTracks(){
   }
   const on=bar.querySelector('.on');if(on&&on.scrollIntoView)try{on.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
   $('#empty').classList.toggle('hide',S.tracks.length>0);$('#boardBox').classList.toggle('hide',!S.tracks.length);
-  $('#allHint').classList.toggle('hide',!S.tracks.length||!!cur);$('#editHint').classList.toggle('hide',!cur||INST[cur.inst].kind==='audio');
   if(B.cv)B.cv.style.touchAction=cur&&INST[cur.inst].kind!=='audio'?'none':'pan-y';
   const box=$('#panel');box.textContent='';box.classList.toggle('hide',!cur);
   if(cur){
@@ -831,7 +832,7 @@ function init(){
   const key=$('#key');key.append(h('option',{value:'auto',textContent:'Auto'}));NOTE_NAMES.forEach((n,i)=>key.append(h('option',{value:String(i),textContent:n})));
   wireBoard($('#board'));
   try{const s=localStorage.getItem('melodeas.v1');if(s)restore(JSON.parse(s));}catch(e){}
-  syncControls();renderTracks();
+  pruneEmpty();syncControls();renderTracks();
 
   const menu=$('#menu'),sheet=$('#settings');
   $('#menuBtn').onclick=()=>menu.showModal();$('#loopBtn').onclick=()=>sheet.showModal();

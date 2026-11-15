@@ -19,7 +19,7 @@
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{margin:0;min-height:100vh;min-height:100dvh;background:var(--bg);-webkit-tap-highlight-color:transparent}
+body{margin:0;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);-webkit-tap-highlight-color:transparent}
 body:has(dialog[open]){overflow:hidden}
 button,select,input{font:inherit;color:inherit}
 button{cursor:pointer;touch-action:manipulation}
@@ -28,7 +28,7 @@ button{cursor:pointer;touch-action:manipulation}
 .inner{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 
 /* top bar */
-.appbar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding-top:var(--safe-t)}
+.appbar{flex:none;z-index:20;background:var(--bg);border-bottom:1px solid var(--line);padding-top:var(--safe-t)}
 .appbar .inner{height:56px;display:flex;align-items:center;justify-content:space-between}
 .brand{display:flex;align-items:center;gap:10px;font-size:21px;font-weight:800;letter-spacing:-.03em}
 .brand svg{width:28px;height:28px;flex:none}
@@ -36,10 +36,10 @@ button{cursor:pointer;touch-action:manipulation}
 .icon:hover{background:var(--panel)}
 .icon svg{width:24px;height:24px;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;fill:none}
 
-main{padding-top:12px;padding-bottom:calc(190px + var(--safe-b))}
+main{flex:1;min-height:90px;position:relative;display:flex}
 
 /* bottom dock */
-.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b);box-shadow:0 -10px 30px rgba(0,0,0,.35)}
+.dock{flex:none;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b);box-shadow:0 -10px 30px rgba(0,0,0,.35)}
 .dock .inner{max-width:760px;padding-top:10px;padding-bottom:10px}
 .now{display:flex;align-items:center;gap:12px;min-height:38px}
 .beats{display:flex;gap:6px;flex:none}
@@ -97,9 +97,9 @@ meter{width:120px;height:12px}
 @keyframes nudge{50%{transform:translateX(6px)}}
 
 /* board and the panel of the selected instrument */
-.board{position:relative;height:clamp(240px,calc(100dvh - 500px),460px);background:var(--lane);border-radius:var(--r);overflow:hidden}
+.board{position:absolute;inset:0;background:var(--lane)}
 canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;touch-action:pan-y}
-.panel{margin-top:10px;background:var(--panel);border-radius:var(--r);border-left:6px solid var(--c);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.panel{max-width:760px;margin:0 auto;border-top:3px solid var(--c);border-bottom:1px solid var(--line);padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:7px;max-height:42vh;max-height:42dvh;overflow-y:auto}
 .th .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tn{font-weight:700;font-size:15px;margin-right:6px}
 .tn small{display:block;font-weight:500;font-size:12px;color:var(--c)}
@@ -113,11 +113,9 @@ canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;touc
 .hint{color:var(--soft);font-size:13.5px;line-height:1.5;margin:10px 0 0;max-width:80ch}
 .th input[type=range]{width:90px;accent-color:var(--c)}
 .oct{font-size:12px;color:var(--soft)}
-.empty{margin:0;padding:22px;border:2px dashed var(--line);border-radius:var(--r);color:var(--soft);font-size:16px;line-height:1.45}
+.empty{margin:auto;padding:22px;max-width:520px;color:var(--soft);font-size:16px;line-height:1.45;text-align:center}
 .empty strong{display:block;color:var(--text);font-size:19px;margin-bottom:4px}
 
-.support{margin-top:30px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;color:var(--soft);font-size:14px}
-.support p{margin:0;flex:1 1 260px;line-height:1.45}
 .link{display:inline-flex;align-items:center;height:40px;border-radius:20px;padding:0 16px;border:1px solid var(--line);color:var(--text);text-decoration:none;font-weight:600;font-size:14px;background:var(--panel)}
 .link:hover{border-color:var(--soft)}
 .link.paypal{background:#0070BA;border-color:#0070BA;color:#fff}
@@ -165,11 +163,15 @@ dialog .icon{margin-right:-10px}
   #settings[open]{animation-name:fromBottom}
   .ctl{gap:8px}
   .play,.tempo{min-width:84px}
-  main{padding-bottom:calc(178px + var(--safe-b))}
 }
 @media (min-width:721px){
   .status{font-size:15px}
   .rec{width:96px;height:96px}
+}
+@media (max-height:560px){
+  .rec{width:64px;height:64px}
+  .status{min-height:0}
+  .panel{max-height:34dvh}
 }
 @media (prefers-reduced-motion:reduce){
   .rec[data-state=armed] .dot,.bar.nudge .chips{animation:none}
@@ -189,21 +191,13 @@ dialog .icon{margin-right:-10px}
   <nav class="bar" id="add" aria-label="Instruments"><div class="inner chips" id="chips"></div></nav>
 </header>
 
-<main class="inner">
+<main>
   <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>Pick an instrument at the top, press the red button, and perform one round of the loop.</p>
   <div class="board hide" id="boardBox"><canvas id="board" class="lane"></canvas></div>
-  <p class="hint hide" id="allHint">All instruments are shown. Tap one at the top to bring it to the front, record into it or edit it. Tap it again to come back here.</p>
-  <section class="panel th hide" id="panel" aria-label="Selected instrument"></section>
-  <p class="hint hide" id="editHint">Drag a note to move it, drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Click a drum hit to switch drum. Recording again adds to what is there.</p>
-
-  <footer class="support">
-    <p>Melodeas is free. If it helps you catch ideas, you can chip in.</p>
-    <a class="link paypal" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
-    <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
-  </footer>
 </main>
 
 <div class="dock">
+  <section class="panel th hide" id="panel" aria-label="Selected instrument"></section>
   <div class="inner">
     <div class="now">
       <div class="beats" id="beats" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
@@ -238,6 +232,7 @@ dialog .icon{margin-right:-10px}
       <a class="link paypal" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
       <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
     </div>
+    <p class="keys">Editing: select an instrument, then drag a note to move it, drag its right edge to change its length, double-tap it to remove it, double-tap an empty spot to add one. Tap a drum hit to switch drum.</p>
     <p class="keys">On a computer: Space plays and stops, R records.</p>
   </div>
 </dialog>
