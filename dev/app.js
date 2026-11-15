@@ -646,14 +646,17 @@ function boardLayout(w,H,LB){
     let lo,hi;
     if(B.dragRange){lo=B.dragRange.lo;hi=B.dragRange.hi;}
     else{
-      lo=127;hi=0;for(const t of melT)if(t.lenBeats>0)for(const e of playEvents(t)){if(e.n<lo)lo=e.n;if(e.n>hi)hi=e.n;}
-      const s=selTrack(),o=s&&INST[s.inst].kind==='melodic'?s.octave:0;
-      if(hi<lo){lo=52+12*o;hi=72+12*o;}else{lo-=2;hi+=2;while(hi-lo<14){lo--;hi++;}}
+      // each instrument is shown in the same octave, whatever octave it plays in: only the octaves inside one instrument matter
+      lo=127;hi=0;for(const t of melT){const evs=t.lenBeats>0?playEvents(t):[];
+        if(!evs.length)t.dOff=-12*t.octave;
+        else{if(t.dEv!==evs){t.dEv=evs;t.dMed=DSP.median(evs.map(e=>e.n));}const med=t.dMed;if(t.dOff==null||t.dOff%12!==0||Math.abs(med+t.dOff-60)>8)t.dOff=-12*Math.round((med-60)/12);}
+        for(const e of evs){const n=e.n+t.dOff;if(n<lo)lo=n;if(n>hi)hi=n;}}
+      if(hi<lo){lo=52;hi=72;}else{lo-=2;hi+=2;while(hi-lo<14){lo--;hi++;}}
       // while a track is selected the pitch range only grows, so notes don't jump around under the pointer
       const vr=B.view;if(S.sel!=null&&vr&&vr.key===S.sel&&Math.max(hi,vr.hi)-Math.min(lo,vr.lo)<=48){lo=Math.min(lo,vr.lo);hi=Math.max(hi,vr.hi);}
       B.view=S.sel!=null?{lo,hi,key:S.sel}:null;
     }
-    lo=Math.max(0,lo);hi=Math.min(127,hi);const hM=H-y-dh;L.mel={y0:y,h:hM,lo,hi,rh:hM/(hi-lo+1)};
+    const hM=H-y-dh;L.mel={y0:y,h:hM,lo,hi,rh:hM/(hi-lo+1)};
   }
   return L;
 }
@@ -665,9 +668,10 @@ function drawBoard(pos,LB){
   g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,H);g.font='10px "Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif';
   if(R.state==='recording'){g.fillStyle='rgba(255,93,93,.14)';g.fillRect(0,0,w,H);}
   if(M){
-    if(M.rh>=4)for(let n=M.lo;n<=M.hi;n++){const y=M.y0+M.h-(n-M.lo+1)*M.rh,pc=n%12;
+    if(M.rh>=4)for(let n=M.lo;n<=M.hi;n++){const y=M.y0+M.h-(n-M.lo+1)*M.rh,pc=((n%12)+12)%12;
       if(pc===1||pc===3||pc===6||pc===8||pc===10){g.fillStyle='rgba(255,255,255,.035)';g.fillRect(0,y,w,M.rh);}}
-    g.fillStyle='rgba(168,168,168,.7)';for(let n=M.lo;n<=M.hi;n++)if(n%12===0)g.fillText('C'+(n/12-1),4,M.y0+M.h-(n-M.lo)*M.rh-1);
+    const co=cur&&INST[cur.inst].kind==='melodic'?cur.dOff||0:null; // octave numbers belong to the selected instrument
+    g.fillStyle='rgba(168,168,168,.7)';for(let n=M.lo;n<=M.hi;n++)if(((n%12)+12)%12===0)g.fillText(co==null?'C':'C'+((n-co)/12-1),4,M.y0+M.h-(n-M.lo)*M.rh-1);
   }
   if(D){g.fillStyle='rgba(255,255,255,.03)';D.rows.forEach((r,i)=>{if(i%2===0)g.fillRect(0,D.y0+i*D.rh,w,D.rh);});
     g.fillStyle='rgba(168,168,168,.7)';D.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,D.y0+i*D.rh+11));}
@@ -686,7 +690,7 @@ function drawBoard(pos,LB){
         const x=b/LB*w,y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n});}
     }else{
-      const G=tr.geom={w,LB,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo,hi:M.hi};
+      const off=tr.dOff||0,G=tr.geom={w,LB,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo-off,hi:M.hi-off};
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9||e.n<G.lo||e.n>G.hi)continue;
         const x=b/LB*w,y=G.hh-(e.n-G.lo+1)*G.rh,bw=Math.max(4,e.d/LB*w-1.5),bh=Math.max(4,G.rh-1);g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,bw,bh);tr.rects.push({x:x-3,y:y-4,w:bw+6,h:bh+8,src:e.src,n:e.n,mel:true});}
@@ -725,7 +729,7 @@ function wireBoard(cv){
     const q=laneHit(tr,e);if(!q)return;
     try{cv.setPointerCapture(e.pointerId);}catch(err){}
     drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
-    if(I.kind==='melodic')B.dragRange={lo:tr.geom.lo,hi:tr.geom.hi};
+    if(I.kind==='melodic')B.dragRange={lo:tr.geom.lo+(tr.dOff||0),hi:tr.geom.hi+(tr.dOff||0)};
   });
   cv.addEventListener('pointermove',e=>{
     const tr=drag?drag.tr:selTrack();
