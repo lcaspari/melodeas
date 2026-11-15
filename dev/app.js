@@ -43,7 +43,7 @@ const DRUM_NEXT={kicksnare:{kick:'snare',snare:'kick'},kit:{kick:'snare',snare:'
 const NOTE_NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
 
 /* ---------- state ---------- */
-const S={bpm:96,bars:2,grid:0.25,scale:'off',keyRoot:'auto',click:true,listen:'speakers',firstTake:'metronome',latencyMs:null,sens:1,tracks:[],sel:null,nextId:1,lastTake:null,learned:[]};
+const S={bpm:96,bars:2,grid:0.25,scale:'off',keyRoot:'auto',click:true,listen:'speakers',firstTake:'metronome',latencyMs:null,sens:1,duck:0.03,tracks:[],sel:null,nextId:1,lastTake:null,learned:[]};
 const T={playing:false,t0:0,schedT:0,timer:null};
 const R={state:'idle',track:null,free:false,tStart:0,tEnd:0,lat:0,bpm:96,lenBeats:8,timer:null};
 let ctx=null,master=null,musicBus=null,clickBus=null,fx=null,micStream=null,micMode=null,micSrc=null,capNode=null,analyser=null,capChunks=null,capViaWorklet=false;
@@ -63,12 +63,12 @@ function idleStatus(){
 
 /* ---------- persistence ---------- */
 function snapshot(withAudio){
-  return {v:2,bpm:S.bpm,bars:S.bars,grid:S.grid,scale:S.scale,keyRoot:S.keyRoot,click:S.click,listen:S.listen,firstTake:S.firstTake,latencyMs:S.latencyMs,sens:S.sens,learned:S.learned,
+  return {v:2,bpm:S.bpm,bars:S.bars,grid:S.grid,scale:S.scale,keyRoot:S.keyRoot,click:S.click,listen:S.listen,firstTake:S.firstTake,latencyMs:S.latencyMs,sens:S.sens,duck:S.duck,learned:S.learned,
     tracks:S.tracks.map(t=>({inst:t.inst,kit:t.kit,vol:t.vol,mute:t.mute,octave:t.octave,eq:t.eq,rev:t.rev,lenBeats:t.lenBeats,notes:t.notes,
       audio:withAudio&&t.audio?{sr:t.audio.sr,bpm:t.audio.bpm,b64:pcmToB64(t.audio.data)}:null}))};
 }
 function restore(o){
-  for(const k of ['bpm','bars','grid','scale','keyRoot','click','listen','firstTake','latencyMs','sens'])if(o[k]!==undefined)S[k]=o[k];
+  for(const k of ['bpm','bars','grid','scale','keyRoot','click','listen','firstTake','latencyMs','sens','duck'])if(o[k]!==undefined)S[k]=o[k];
   if(Array.isArray(o.learned))S.learned=o.learned.slice(-60);
   S.tracks.forEach(dropTrackNodes);S.tracks=[];
   for(const t of o.tracks||[]){
@@ -290,7 +290,7 @@ function playNote(c,dest,id,t,midi,vel,dur){
   const end=t+d+Rl*1.5+0.05;for(const o of stop)o.stop(end);
 }
 function click(t,accent,countIn){
-  const o=ctx.createOscillator(),g=ctx.createGain(),lvl=(R.state!=='idle'&&S.listen==='speakers'&&!countIn)?0.12:0.28;
+  const o=ctx.createOscillator(),g=ctx.createGain(),lvl=(R.state!=='idle'&&S.listen==='speakers'&&!countIn)?0.04:0.28;
   o.frequency.value=accent?1568:1047;g.gain.setValueAtTime(lvl,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.05);
   o.connect(g).connect(clickBus);o.start(t);o.stop(t+0.06);
 }
@@ -500,7 +500,7 @@ async function recPress(){
     else{const pos=(now+0.3-T.t0)/sp;R.tStart=T.t0+(pos<=0?0:Math.ceil(pos/LB)*LB)*sp;}
     R.tEnd=R.tStart+LB*sp;R.bpm=S.bpm;R.lenBeats=LB;R.state='armed';
     if(S.listen==='speakers'){ // turn the loop down while the mic is listening
-      musicBus.gain.setTargetAtTime(0.3,Math.max(now,R.tStart-0.06),0.02);musicBus.gain.setTargetAtTime(1,R.tEnd,0.05);}
+      musicBus.gain.setTargetAtTime(Math.max(S.duck,0.0001),Math.max(now,R.tStart-0.06),0.02);musicBus.gain.setTargetAtTime(1,R.tEnd,0.05);}
     R.timer=setTimeout(finishRec,(R.tEnd+R.lat+0.18-now)*1000);
   }
   lockControls();
@@ -780,7 +780,7 @@ function updateKeyLabel(){const k=$('#key');if(!k.options.length)return;$('#keyF
   k.options[0].textContent=S.scale!=='off'&&S.keyRoot==='auto'&&S.tracks.some(t=>INST[t.inst].kind==='melodic'&&t.notes.length)?'Auto ('+NOTE_NAMES[currentRoot()]+')':'Auto';}
 function syncControls(){
   showBpm(S.bpm);$('#bars').value=S.bars;$('#grid').value=String(S.grid);if($('#grid').selectedIndex<0)$('#grid').value='0.25';
-  $('#scale').value=S.scale;$('#key').value=String(S.keyRoot);$('#click').setAttribute('aria-pressed',S.click);$('#sens').value=String(S.sens);
+  $('#scale').value=S.scale;$('#key').value=String(S.keyRoot);$('#click').setAttribute('aria-pressed',S.click);$('#sens').value=String(S.sens);$('#duck').value=String(S.duck);
   $('#lat').value=S.latencyMs==null?'':S.latencyMs;
   document.querySelectorAll('[data-listen]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.listen===S.listen));
   document.querySelectorAll('[data-first]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.first===S.firstTake));
@@ -813,7 +813,7 @@ function init(){
   $('#scale').onchange=e=>{S.scale=e.target.value;invalidate();};
   $('#key').onchange=e=>{S.keyRoot=e.target.value==='auto'?'auto':+e.target.value;invalidate();};
   $('#click').onclick=e=>{S.click=!S.click;e.target.setAttribute('aria-pressed',S.click);save();};
-  $('#sens').onchange=e=>{S.sens=+e.target.value;save();};
+  $('#sens').onchange=e=>{S.sens=+e.target.value;save();};$('#duck').onchange=e=>{S.duck=+e.target.value;save();};
   document.querySelectorAll('[data-listen]').forEach(b=>b.onclick=async()=>{if(R.state!=='idle')return;S.listen=b.dataset.listen;syncControls();save();
     setStatus(S.listen==='speakers'?'Speakers: the loop turns down while you record, and echo cancelling keeps it out of the mic.':'Headphones: the cleanest signal, so the best detection.',5000);
     if(micStream)try{await ensureMic();}catch(e){}});
