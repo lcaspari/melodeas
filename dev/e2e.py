@@ -1,6 +1,6 @@
-import asyncio, json, sys, os
+import asyncio, json, sys
 from playwright.async_api import async_playwright
-URL=sys.argv[1] if len(sys.argv)>1 else 'file://'+os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','index.html'))
+URL=sys.argv[1] if len(sys.argv)>1 else 'file:///home/claude/melodeas/index.html'
 NOWL=len(sys.argv)>2
 PATCH = """
 () => {
@@ -23,6 +23,13 @@ PATCH = """
     o.connect(f).connect(g).connect(window.melodeas.capNode); o.start(t); o.stop(t+dur+0.01); };
 }
 """
+async def open_settings(page):
+    await page.click('#loopBtn'); await page.wait_for_selector('#settings[open]')
+async def close_dlg(page):
+    await page.keyboard.press('Escape'); await page.wait_for_timeout(120)
+async def menu_do(page,sel):
+    await page.click('#menuBtn'); await page.wait_for_selector('#menu[open]'); await page.click(sel); await page.wait_for_timeout(150)
+
 async def wait_state(page, st, timeout=30000):
     await page.wait_for_function("s => window.melodeas.R.state===s", arg=st, timeout=timeout)
 async def main():
@@ -30,7 +37,7 @@ async def main():
     def check(name, ok, extra=''):
         nonlocal fails; print(('PASS ' if ok else 'FAIL ')+name+('  '+str(extra) if extra else '')); fails += (not ok)
     async with async_playwright() as p:
-        b = await p.chromium.launch(executable_path=os.environ.get('CHROME','/usr/bin/google-chrome'), headless=True,
+        b = await p.chromium.launch(executable_path='/usr/bin/google-chrome', headless=True,
             args=['--autoplay-policy=no-user-gesture-required','--use-fake-ui-for-media-stream','--use-fake-device-for-media-stream','--no-sandbox'])
         page = await b.new_page(viewport={'width':1180,'height':900})
         errs=[]
@@ -40,7 +47,7 @@ async def main():
         if NOWL: await page.evaluate('window.melodeasNoWorklet=true')
         await page.screenshot(path='shot-empty.png', full_page=True)
         # ---- 1. kick+snare, following the click
-        await page.click('text=Kick + snare'); await page.click('summary'); await page.fill('#lat','0'); await page.dispatch_event('#lat','change')
+        await page.click('text=Kick + snare'); await open_settings(page); await page.fill('#lat','0'); await page.dispatch_event('#lat','change'); await close_dlg(page)
         await page.click('#rec'); await wait_state(page,'armed')
         pat=[(0,'kick',.6),(1,'kick',.3),(2,'snare',.6),(3.5,'kick',.6),(4,'kick',.6),(5,'kick',.5),(6,'snare',.6),(6.75,'snare',.25),(7.5,'kick',.5)]
         await page.evaluate("pat => { const m=window.melodeas, sp=60/m.S.bpm; for(const [b,k,a] of pat) window.__burst(k, m.R.tStart+b*sp, a); }", pat)
@@ -95,7 +102,7 @@ async def main():
         notes = await page.evaluate("window.melodeas.S.tracks[0].notes"); st = await page.inner_text('#status')
         added=[n for n in notes if abs(n['t']-1.5)<0.05 or abs(n['t']-5.5)<0.05]
         check('overdub: 9 + 2 hits, new ones are snare', len(notes)==11 and len(added)==2 and all(n['drum']=='snare' for n in added), f"{len(notes)} notes; status: {st}")
-        await page.click('#undo'); n2 = await page.evaluate("window.melodeas.S.tracks[0].notes.length")
+        await menu_do(page,'#undo'); n2 = await page.evaluate("window.melodeas.S.tracks[0].notes.length")
         check('undo removes the overdub', n2==9, n2)
         # ---- 4b. drag a bass note one beat right and two semitones up; add and remove notes
         await page.click('.tr >> nth=1 >> .tn'); await page.wait_for_timeout(300)
@@ -122,8 +129,8 @@ async def main():
         await page.screenshot(path='shot-edit.png', full_page=True)
         # ---- 5. free first take sets tempo
         page.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
-        await page.click('#play'); await page.click('#clearAll')
-        await page.click('text=Set the tempo'); await page.click('.chip:has-text("Hi-hat")')
+        await page.click('#play'); await menu_do(page,'#clearAll')
+        await open_settings(page); await page.click('[data-first=free]'); await close_dlg(page); await page.click('.chip:has-text("Hi-hat")')
         await page.click('#rec'); await wait_state(page,'recording')
         await page.evaluate("()=>{ const m=window.melodeas; window.__t0=m.ctx.currentTime+0.4; for(let i=0;i<8;i++) window.__burst(i===3?'ohat':'hat', window.__t0+i*0.5, 0.5); }")
         await page.wait_for_function("window.melodeas.ctx.currentTime >= window.__t0+4.0-0.012")
@@ -144,7 +151,7 @@ async def main():
         await page.evaluate("()=>{ const m=window.melodeas; window.__sing(64, m.R.tStart+2.0, 1.0, 0.4); }")
         await wait_state(page,'idle'); st = await page.inner_text('#status')
         check('voice overdub layers', 'on top' in st, st)
-        await page.click('#play'); await page.click('#clearAll'); await page.click('text=Follow the click')
+        await page.click('#play'); await menu_do(page,'#clearAll'); await open_settings(page); await page.click('[data-first=metronome]'); await close_dlg(page)
         await page.click('text=Kick + snare'); await page.click('#rec'); await wait_state(page,'armed')
         await page.evaluate("()=>{ const m=window.melodeas, sp=60/m.S.bpm; for(const b of [0,2,4,6]) window.__burst('p', m.R.tStart+b*sp, 0.5); }")
         await wait_state(page,'idle')

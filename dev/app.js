@@ -429,11 +429,12 @@ function kickAudio(tr){ // a fresh voice take joins the loop mid-round
   const lb=ab%LB,j=Math.floor(lb/tr.lenBeats),off=lb-j*tr.lenBeats,rem=Math.min(tr.lenBeats,LB-j*tr.lenBeats)-off;
   if(rem>0.1&&audible(tr,S.tracks.some(t=>t.solo),now))startAudio(tr,now,off,rem);
 }
+function showBpm(v){document.querySelectorAll('[data-bpm]').forEach(e=>e.textContent=v);}
 function setBpm(v){
   if(R.state!=='idle')return;
   v=clamp(Math.round(v),40,220);
   if(T.playing){const now=ctx.currentTime,pos=(now-T.t0)/spb();T.t0=now-pos*60/v;}
-  S.bpm=v;$('#bpm').textContent=v;if(fx)fx.setTempo(spb());save();
+  S.bpm=v;showBpm(v);if(fx)fx.setTempo(spb());save();
 }
 
 /* ---------- recording ---------- */
@@ -736,7 +737,7 @@ function lockControls(){const busy=R.state!=='idle';for(const id of ['bpmDown','
 function updateKeyLabel(){const k=$('#key');if(!k.options.length)return;$('#keyF').classList.toggle('hide',S.scale==='off');
   k.options[0].textContent=S.scale!=='off'&&S.keyRoot==='auto'&&S.tracks.some(t=>INST[t.inst].kind==='melodic'&&t.notes.length)?'Auto ('+NOTE_NAMES[currentRoot()]+')':'Auto';}
 function syncControls(){
-  $('#bpm').textContent=S.bpm;$('#bars').value=S.bars;$('#grid').value=String(S.grid);if($('#grid').selectedIndex<0)$('#grid').value='0.25';
+  showBpm(S.bpm);$('#bars').value=S.bars;$('#grid').value=String(S.grid);if($('#grid').selectedIndex<0)$('#grid').value='0.25';
   $('#scale').value=S.scale;$('#key').value=String(S.keyRoot);$('#click').setAttribute('aria-pressed',S.click);$('#sens').value=String(S.sens);
   $('#lat').value=S.latencyMs==null?'':S.latencyMs;
   document.querySelectorAll('[data-listen]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.listen===S.listen));
@@ -749,6 +750,11 @@ function init(){
   try{const s=localStorage.getItem('melodeas.v1');if(s)restore(JSON.parse(s));}catch(e){}
   syncControls();renderTracks();
 
+  const menu=$('#menu'),sheet=$('#settings');
+  $('#menuBtn').onclick=()=>menu.showModal();$('#loopBtn').onclick=()=>sheet.showModal();
+  $('#openSettings').onclick=()=>{menu.close();sheet.showModal();};
+  document.querySelectorAll('dialog').forEach(d=>{d.addEventListener('click',e=>{if(e.target===d)d.close();});d.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>d.close());});
+  menu.addEventListener('click',e=>{const b=e.target.closest('.mi');if(b&&b.id!=='openSettings')menu.close();});
   $('#rec').onclick=recPress;
   $('#play').onclick=async()=>{
     if(T.playing){cancelRec();stopTransport();return;}
@@ -781,7 +787,7 @@ function init(){
   $('#undo').onclick=()=>{const tr=S.tracks.find(t=>t.id===S.lastTake);if(!tr||!tr.prev){setStatus('Nothing to undo.',3000);return;}
     const p=tr.prev;tr.prev={notes:tr.notes,audio:tr.audio,lenBeats:tr.lenBeats,peaks:tr.peaks};Object.assign(tr,p);tr.buf=null;invalidate();renderTracks();setStatus('Went back one step on '+INST[tr.inst].name.toLowerCase()+'.',3000);};
   $('#clearAll').onclick=()=>{if(!S.tracks.length||!window.confirm('Remove every track?'))return;cancelRec();if(T.playing)stopTransport();S.tracks.forEach(dropTrackNodes);S.tracks=[];S.sel=null;invalidate();renderTracks();};
-  document.addEventListener('keydown',e=>{if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)&&e.code==='Space')return;if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
+  document.addEventListener('keydown',e=>{if(document.querySelector('dialog[open]'))return;if(/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)&&e.code==='Space')return;if(/INPUT|SELECT|TEXTAREA/.test(e.target.tagName))return;
     if(e.code==='Space'){e.preventDefault();$('#play').click();}else if(e.key==='r'||e.key==='R')recPress();});
   requestAnimationFrame(frame);
 }
