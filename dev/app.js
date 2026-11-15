@@ -60,7 +60,7 @@ function setStatus(msg,hold){st(msg);statusLock=hold?performance.now()+hold:0;}
 function idleStatus(){
   if(performance.now()<statusLock)return;
   const tr=selTrack();
-  st(tr?INST[tr.inst].hint+(hasContent(tr)?' Recording again adds to this take.':''):'Pick a sound below to start a track.');
+  st(tr?INST[tr.inst].hint+(hasContent(tr)?' Recording again adds to this take.':''):(S.tracks.length?'Tap an instrument at the top to record or edit it.':'Pick an instrument at the top to start.'));
 }
 
 /* ---------- persistence ---------- */
@@ -82,7 +82,7 @@ function restore(o){
     if(tr.audio)tr.peaks=makePeaks(tr.audio.data);
     S.tracks.push(tr);
   }
-  S.sel=S.tracks.length?S.tracks[S.tracks.length-1].id:null;
+  S.sel=null;
 }
 let saveTimer=0;
 function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem('melodeas.v1',JSON.stringify(snapshot(false)));}catch(e){}},300);}
@@ -99,7 +99,7 @@ function newTrack(inst){const tr={id:S.nextId++,inst,kit:'punch',vol:0.8,mute:fa
 function addTrack(inst){const tr=newTrack(inst);S.tracks.push(tr);S.sel=tr.id;invalidate();renderTracks();preview(tr);setStatus(INST[inst].hint+' Press the red button when you are ready.',6000);}
 function setInst(tr,inst){if(tr.octave===(INST[tr.inst].octave||0))tr.octave=INST[inst].octave||0;tr.inst=inst;mixDefaults(tr);applyMix(tr);invalidate();renderTracks();preview(tr);}
 function dropTrackNodes(tr){if(ctx)stopFrozen(tr);tr.frozen=null;clearTimeout(tr.fzTimer);if(tr.nodes){for(const k of ['vol','rev','dly'])try{tr.nodes[k].disconnect();}catch(e){}tr.nodes=null;}tr.buf=null;}
-function removeTrack(tr){if(R.track===tr)cancelRec();dropTrackNodes(tr);S.tracks=S.tracks.filter(t=>t!==tr);if(S.sel===tr.id)S.sel=S.tracks.length?S.tracks[S.tracks.length-1].id:null;invalidate();renderTracks();}
+function removeTrack(tr){if(R.track===tr)cancelRec();dropTrackNodes(tr);S.tracks=S.tracks.filter(t=>t!==tr);if(S.sel===tr.id)S.sel=null;invalidate();renderTracks();}
 function softInvalidate(tr){tr.ev=null;evCache=null;rootCache=null;}
 function invalidate(){evCache=null;rootCache=null;for(const t of S.tracks)t.ev=null;save();updateKeyLabel();}
 function keep(tr){tr.prev={notes:tr.notes.map(n=>Object.assign({},n)),audio:tr.audio,lenBeats:tr.lenBeats,peaks:tr.peaks};S.lastTake=tr.id;}
@@ -499,7 +499,7 @@ async function recPress(){
   if(R.state==='analysing')return;
   if(R.state!=='idle'){cancelRec('Recording cancelled.');return;}
   const tr=selTrack();
-  if(!tr){setStatus('Pick a sound below first.',4000);const a=$('#add');a.classList.remove('nudge');void a.offsetWidth;a.classList.add('nudge');return;}
+  if(!tr){setStatus('Pick an instrument at the top first.',4000);const a=$('#add');a.classList.remove('nudge');void a.offsetWidth;a.classList.add('nudge');return;}
   try{await ensureAudio();await ensureMic();}catch(e){setStatus(micError(e),8000);return;}
   if(R.state!=='idle')return;
   R.track=tr;R.lat=latency();capStart();
@@ -631,110 +631,132 @@ async function exportMix(){
   setStatus('Mix exported as WAV.',4000);
 }
 
-/* ---------- drawing ---------- */
-const ROW_LABEL={kick:'kick',snare:'snare',hat:'hat',ohat:'open'};
-function drawLane(tr,pos,LB){
-  const c=tr.cv;if(!c)return;
-  const dpr=window.devicePixelRatio||1,w=c.clientWidth,hh=c.clientHeight;if(!w)return;
-  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(hh*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(hh*dpr);}
-  const g=c.getContext('2d'),I=INST[tr.inst],sel=tr.id===S.sel,G=tr.geom={w,hh,LB};
-  g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,hh);g.font='10px "Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif';
-  if(R.track===tr&&R.state==='recording'){g.fillStyle='rgba(255,93,93,.16)';g.fillRect(0,0,w,hh);}
-  const evs=tr.lenBeats>0&&I.kind!=='audio'?playEvents(tr):[];
-  if(I.kind==='melodic'){
+/* ---------- the board: every track on one grid, the selected one in front ---------- */
+const ROW_LABEL={kick:'kick',snare:'snare',hat:'hat',ohat:'open'},ALL_ROWS=['ohat','hat','snare','kick'],GREY='#8C8C8C';
+const B={cv:null,view:null,dragRange:null};
+function boardLayout(w,H,LB){
+  const kind=k=>S.tracks.filter(t=>INST[t.inst].kind===k),drumT=kind('drum'),melT=kind('melodic'),audT=kind('audio');
+  const rows=ALL_ROWS.filter(r=>drumT.some(t=>DRUM_ROWS[INST[t.inst].mode].includes(r))),L={w,H,LB};let y=0;
+  if(audT.length){const hA=melT.length||rows.length?Math.min(56,H*0.18):H;L.aud={y0:0,h:hA};y=hA;}
+  const dh=rows.length?(melT.length?Math.min(rows.length*28,H*0.36):H-y):0;
+  if(rows.length)L.drum={y0:H-dh,h:dh,rows,rh:dh/rows.length};
+  if(melT.length){
     let lo,hi;
-    if(tr.dragRange){lo=tr.dragRange.lo;hi=tr.dragRange.hi;}
+    if(B.dragRange){lo=B.dragRange.lo;hi=B.dragRange.hi;}
     else{
-      if(evs.length){lo=127;hi=0;for(const e of evs){if(e.n<lo)lo=e.n;if(e.n>hi)hi=e.n;}const pad=sel?4:2;lo-=pad;hi+=pad;while(hi-lo<(sel?17:9)){lo--;hi++;}}
-      else{lo=50+12*tr.octave;hi=74+12*tr.octave;}
-      // while a track is selected its pitch range only grows, so notes don't jump around under the pointer
-      const vr=tr.viewRange;if(sel&&vr&&vr.key===tr.inst+tr.octave&&Math.max(hi,vr.hi)-Math.min(lo,vr.lo)<=40){lo=Math.min(lo,vr.lo);hi=Math.max(hi,vr.hi);}
-      tr.viewRange=sel?{lo,hi,key:tr.inst+tr.octave}:null;
+      lo=127;hi=0;for(const t of melT)if(t.lenBeats>0)for(const e of playEvents(t)){if(e.n<lo)lo=e.n;if(e.n>hi)hi=e.n;}
+      const s=selTrack(),o=s&&INST[s.inst].kind==='melodic'?s.octave:0;
+      if(hi<lo){lo=52+12*o;hi=72+12*o;}else{lo-=2;hi+=2;while(hi-lo<14){lo--;hi++;}}
+      // while a track is selected the pitch range only grows, so notes don't jump around under the pointer
+      const vr=B.view;if(S.sel!=null&&vr&&vr.key===S.sel&&Math.max(hi,vr.hi)-Math.min(lo,vr.lo)<=48){lo=Math.min(lo,vr.lo);hi=Math.max(hi,vr.hi);}
+      B.view=S.sel!=null?{lo,hi,key:S.sel}:null;
     }
-    lo=Math.max(0,lo);hi=Math.min(127,hi);G.lo=lo;G.hi=hi;G.rh=hh/(hi-lo+1);
-    if(sel&&G.rh>=5)for(let n=lo;n<=hi;n++){const y=hh-(n-lo+1)*G.rh,pc=n%12;
-      if(pc===1||pc===3||pc===6||pc===8||pc===10){g.fillStyle='rgba(255,255,255,.04)';g.fillRect(0,y,w,G.rh);}
-      if(pc===0){g.fillStyle='rgba(168,168,168,.7)';g.fillText('C'+(n/12-1),4,y+G.rh-1);}}
-  }else if(I.kind==='drum'){
-    G.rows=DRUM_ROWS[I.mode];G.rh=hh/G.rows.length;
-    if(sel){g.fillStyle='rgba(168,168,168,.7)';G.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,i*G.rh+11));}
+    lo=Math.max(0,lo);hi=Math.min(127,hi);const hM=H-y-dh;L.mel={y0:y,h:hM,lo,hi,rh:hM/(hi-lo+1)};
   }
-  for(let b=0;b<=LB;b++){const x=Math.round(b/LB*w)+0.5;g.strokeStyle=b%4===0?'rgba(168,168,168,.5)':'rgba(168,168,168,.16)';g.beginPath();g.moveTo(x,0);g.lineTo(x,hh);g.stroke();}
-  tr.rects=[];g.fillStyle=I.color;
-  if(tr.lenBeats>0){
-    const tiles=Math.ceil(LB/tr.lenBeats-1e-9);
-    if(I.kind==='audio'&&tr.peaks){
-      for(let j=0;j<tiles;j++){const x0=j*tr.lenBeats/LB*w,tw=tr.lenBeats/LB*w,n=tr.peaks.length;g.globalAlpha=j?0.5:0.95;
-        for(let i=0;i<n;i++){const x=x0+i/n*tw;if(x>w)break;const a=Math.max(1,tr.peaks[i]*hh*0.9);g.fillRect(x,(hh-a)/2,Math.max(1,tw/n-0.5),a);}}
+  return L;
+}
+function drawBoard(pos,LB){
+  const c=B.cv;if(!c)return;
+  const dpr=window.devicePixelRatio||1,w=c.clientWidth,H=c.clientHeight;if(!w||!H)return;
+  if(c.width!==Math.round(w*dpr)||c.height!==Math.round(H*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(H*dpr);}
+  const g=c.getContext('2d'),L=boardLayout(w,H,LB),M=L.mel,D=L.drum,A=L.aud,cur=selTrack();
+  g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,H);g.font='10px "Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif';
+  if(R.state==='recording'){g.fillStyle='rgba(255,93,93,.14)';g.fillRect(0,0,w,H);}
+  if(M){
+    if(M.rh>=4)for(let n=M.lo;n<=M.hi;n++){const y=M.y0+M.h-(n-M.lo+1)*M.rh,pc=n%12;
+      if(pc===1||pc===3||pc===6||pc===8||pc===10){g.fillStyle='rgba(255,255,255,.035)';g.fillRect(0,y,w,M.rh);}}
+    g.fillStyle='rgba(168,168,168,.7)';for(let n=M.lo;n<=M.hi;n++)if(n%12===0)g.fillText('C'+(n/12-1),4,M.y0+M.h-(n-M.lo)*M.rh-1);
+  }
+  if(D){g.fillStyle='rgba(255,255,255,.03)';D.rows.forEach((r,i)=>{if(i%2===0)g.fillRect(0,D.y0+i*D.rh,w,D.rh);});
+    g.fillStyle='rgba(168,168,168,.7)';D.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,D.y0+i*D.rh+11));}
+  for(let b=0;b<=LB;b++){const x=Math.round(b/LB*w)+0.5;g.strokeStyle=b%4===0?'rgba(168,168,168,.5)':'rgba(168,168,168,.16)';g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}
+  g.strokeStyle='rgba(168,168,168,.5)';for(const y of [A&&(M||D)?A.h:0,D&&(M||A)?D.y0:0])if(y){g.beginPath();g.moveTo(0,Math.round(y)+0.5);g.lineTo(w,Math.round(y)+0.5);g.stroke();}
+  const order=S.tracks.filter(t=>t!==cur);if(cur)order.push(cur);
+  for(const tr of order){
+    const I=INST[tr.inst],front=!cur||tr===cur,dim=front?1:0.38;tr.cv=c;tr.rects=[];g.fillStyle=front?I.color:GREY;
+    const evs=tr.lenBeats>0&&I.kind!=='audio'?playEvents(tr):[],tiles=tr.lenBeats>0?Math.ceil(LB/tr.lenBeats-1e-9):0;
+    if(I.kind==='audio'){tr.geom={w,LB,y0:A.y0,hh:A.y0+A.h};
+      if(tr.peaks)for(let j=0;j<tiles;j++){const x0=j*tr.lenBeats/LB*w,tw=tr.lenBeats/LB*w,n=tr.peaks.length;g.globalAlpha=(j?0.5:0.95)*dim;
+        for(let i=0;i<n;i++){const x=x0+i/n*tw;if(x>w)break;const a=Math.max(1,tr.peaks[i]*A.h*0.9);g.fillRect(x,A.y0+(A.h-a)/2,Math.max(1,tw/n-0.5),a);}}
     }else if(I.kind==='drum'){
-      const bw=Math.max(6,w/LB*0.2),bh=Math.min(G.rh*0.56,34);
+      const G=tr.geom={w,LB,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:DRUM_ROWS[I.mode]},bw=Math.max(6,w/LB*0.2),bh=Math.min(G.rh*0.6,34);
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9)continue;
-        const x=b/LB*w,y=G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1);
+        const x=b/LB*w,y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n});}
-    }else if(evs.length){
+    }else{
+      const G=tr.geom={w,LB,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo,hi:M.hi};
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9||e.n<G.lo||e.n>G.hi)continue;
-        const x=b/LB*w,y=hh-(e.n-G.lo+1)*G.rh,bw=Math.max(4,e.d/LB*w-1.5),bh=Math.max(4,G.rh-1);g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1);
+        const x=b/LB*w,y=G.hh-(e.n-G.lo+1)*G.rh,bw=Math.max(4,e.d/LB*w-1.5),bh=Math.max(4,G.rh-1);g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,bw,bh);tr.rects.push({x:x-3,y:y-4,w:bw+6,h:bh+8,src:e.src,n:e.n,mel:true});}
     }
   }
   g.globalAlpha=1;
-  if(drag&&drag.tr===tr&&drag.moved){for(const q of tr.rects)if(q.src===drag.n){g.strokeStyle='#fff';g.lineWidth=1.5;g.strokeRect(q.x+2,q.y+3,q.w-4,q.h-6);g.lineWidth=1;}}
-  if(pos>=0){const x=pos/LB*w;g.fillStyle='#FFB43A';g.fillRect(x-1,0,2,hh);}
+  if(D){g.fillStyle='rgba(235,235,235,.75)';D.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,D.y0+i*D.rh+11));}
+  if(drag&&drag.moved){for(const q of drag.tr.rects)if(q.src===drag.n){g.strokeStyle='#fff';g.lineWidth=1.5;g.strokeRect(q.x+2,q.y+3,q.w-4,q.h-6);g.lineWidth=1;}}
+  if(pos>=0){const x=pos/LB*w;g.fillStyle='#FFB43A';g.fillRect(x-1,0,2,H);}
 }
 
-/* ---------- editing notes in the selected lane ---------- */
-function laneXY(tr,e){const r=tr.cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
+/* ---------- editing notes of the selected track ---------- */
+function laneXY(tr,e){const r=B.cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
 function laneHit(tr,e){const [x,y]=laneXY(tr,e);
   for(let i=tr.rects.length-1;i>=0;i--){const q=tr.rects[i];if(x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h)return {src:q.src,n:q.n,edge:!!q.mel&&q.w>20&&x>q.x+q.w-9};}
   return null;}
-function selectTrack(tr){if(S.sel===tr.id||R.state!=='idle')return;S.sel=tr.id;statusLock=0;tr.dragged=performance.now();renderTracks();}
+function drumAt(G,y){ // the drum row under the pointer, kept to the drums this track can play
+  const i=clamp(Math.floor((y-G.y0)/G.rh),0,G.rows.length-1);let best=null,bd=99;
+  for(const r of G.allowed){const d=Math.abs(G.rows.indexOf(r)-i);if(d<bd){bd=d;best=r;}}return best;}
+function selectTrack(tr){ // null, or the track that is already selected, goes back to the view of everything
+  if(R.state!=='idle')return;S.sel=tr&&S.sel!==tr.id?tr.id:null;statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
 function addNoteAt(tr,e){
-  const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G)return;
+  const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G||y<G.y0||y>G.hh)return;
   keep(tr);if(!tr.lenBeats)tr.lenBeats=G.LB;
   let b=x/G.w*G.LB;if(S.grid>0)b=Math.floor(b/S.grid+1e-6)*S.grid;
-  const n=I.kind==='drum'?{t:b%tr.lenBeats,drum:G.rows[clamp(Math.floor(y/G.rh),0,G.rows.length-1)],v:100}
+  const n=I.kind==='drum'?{t:b%tr.lenBeats,drum:drumAt(G,y),v:100}
     :{t:b%tr.lenBeats,d:S.grid>0?Math.max(S.grid,0.5):0.5,p:clamp(G.lo+Math.floor((G.hh-y)/G.rh),0,127)-12*tr.octave,v:100};
   tr.notes.push(n);tr.notes.sort((a,b2)=>a.t-b2.t);invalidate();audition(tr,n);
 }
-function wireLane(tr,cv){
-  const I=INST[tr.inst];
+function wireBoard(cv){
+  B.cv=cv;
   cv.addEventListener('pointerdown',e=>{
-    if(S.sel!==tr.id){selectTrack(tr);return;}
-    if(I.kind==='audio')return;
+    const tr=selTrack();
+    if(!tr){for(let i=S.tracks.length-1;i>=0;i--)if(S.tracks[i].rects&&laneHit(S.tracks[i],e)){selectTrack(S.tracks[i]);break;}return;} // in the view of everything, a tap on a note picks its track
+    const I=INST[tr.inst];if(I.kind==='audio')return;
     const q=laneHit(tr,e);if(!q)return;
     try{cv.setPointerCapture(e.pointerId);}catch(err){}
     drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
-    if(I.kind==='melodic')tr.dragRange={lo:tr.geom.lo,hi:tr.geom.hi};
+    if(I.kind==='melodic')B.dragRange={lo:tr.geom.lo,hi:tr.geom.hi};
   });
   cv.addEventListener('pointermove',e=>{
-    if(!drag||drag.tr!==tr){if(S.sel===tr.id&&I.kind!=='audio'){const q=laneHit(tr,e);cv.style.cursor=q?(q.edge?'ew-resize':'grab'):'crosshair';}return;}
-    const dx=e.clientX-drag.x0,dy=e.clientY-drag.y0;
+    const tr=drag?drag.tr:selTrack();
+    if(!drag){if(tr&&INST[tr.inst].kind!=='audio'){const q=laneHit(tr,e);cv.style.cursor=q?(q.edge?'ew-resize':'grab'):'crosshair';}else cv.style.cursor='pointer';return;}
+    const I=INST[tr.inst],dx=e.clientX-drag.x0,dy=e.clientY-drag.y0;
     if(!drag.moved){if(Math.hypot(dx,dy)<4)return;drag.moved=true;keep(tr);}
     const G=tr.geom,n=drag.n,db=dx/G.w*G.LB,len=tr.lenBeats;
     if(drag.resize){let d=drag.d0+db;if(S.grid>0)d=Math.round(d/S.grid)*S.grid;n.d=Math.max(S.grid>0?S.grid:0.1,d);}
     else{
       let t=drag.t0+db;if(S.grid>0)t=DSP.quantize(t,S.grid);t=((t%len)+len)%len;n.t=t>len-1e-6?0:t;
-      if(I.kind==='drum')n.drum=G.rows[clamp(Math.floor(laneXY(tr,e)[1]/G.rh),0,G.rows.length-1)];
+      if(I.kind==='drum')n.drum=drumAt(G,laneXY(tr,e)[1]);
       else n.p=clamp(drag.p0-Math.round(dy/G.rh),G.lo,G.hi)-12*tr.octave;
     }
     softInvalidate(tr);
   });
   const up=()=>{
-    if(!drag||drag.tr!==tr)return;const d=drag;drag=null;tr.dragRange=null;
+    if(!drag)return;const d=drag,tr=d.tr;drag=null;B.dragRange=null;
     if(d.moved){tr.dragged=performance.now();if(d.n.drum&&d.n.drum!==d.drum0)learn(tr,d.n);invalidate();audition(tr,d.n);}
   };
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
   cv.addEventListener('click',e=>{
-    if(S.sel!==tr.id||performance.now()-tr.dragged<350)return;
+    const tr=selTrack();if(!tr||performance.now()-tr.dragged<350)return;const I=INST[tr.inst];
     const q=laneHit(tr,e);if(q&&q.src.drum){keep(tr);const n=q.src;n.drum=DRUM_NEXT[I.mode][n.drum]||n.drum;learn(tr,n);invalidate();audition(tr,n);}
   });
   cv.addEventListener('dblclick',e=>{
-    if(S.sel!==tr.id||I.kind==='audio')return;
+    const tr=selTrack();if(!tr||INST[tr.inst].kind==='audio')return;
     const q=laneHit(tr,e);if(q){keep(tr);tr.notes=tr.notes.filter(z=>z!==q.src);invalidate();}else addNoteAt(tr,e);
   });
 }
 
-/* ---------- track list ---------- */
+/* ---------- instrument bar and the panel of the selected track ---------- */
+const FAMILY={bass:['bass','sub','bass808','reese','acid'],synth1:['synth1','sqlead'],synth2:['synth2','bell'],epiano:['epiano','piano','lofi','organ'],pad:['pad','strings'],brass:['brass','trumpet']};
+const chipOf=tr=>{for(const k in FAMILY)if(FAMILY[k].includes(tr.inst))return k;return tr.inst;};
 const hpFromX=x=>x<=0.001?0:Math.round(20*Math.pow(50,x)),xFromHp=v=>v<=20?0:Math.log(v/20)/Math.log(50);
 const lpFromX=x=>x>=0.999?20000:Math.round(500*Math.pow(40,x)),xFromLp=v=>v>=20000?1:Math.log(v/500)/Math.log(40);
 const fmtHz=v=>v>=1000?(v/1000).toFixed(v>=10000?0:1)+' kHz':Math.round(v)+' Hz';
@@ -749,41 +771,45 @@ function eqPanel(tr){
     h('span',{},'Reverb'),sl('Reverb',tr.rev,x=>tr.rev=Math.round(x*100)/100),oRv,
     h('button',{className:'sm',textContent:'Back to the '+INST[tr.inst].name.toLowerCase()+' default',onclick:()=>{mixDefaults(tr);applyMix(tr);save();renderTracks();}}));
 }
+function chipPress(k,tr){if(R.state!=='idle')return;if(tr)selectTrack(tr);else addTrack(k);}
 function renderTracks(){
-  const ul=$('#tracks');ul.textContent='';
-  $('#empty').classList.toggle('hide',S.tracks.length>0);$('#editHint').classList.toggle('hide',!S.tracks.length);
-  for(const tr of S.tracks){
-    const I=INST[tr.inst],sel=tr.id===S.sel;
-    const name=h('button',{className:'tn',onclick:()=>selectTrack(tr),title:'Record into this track'},I.name,h('small',{},(sel?'Next take goes here':hasContent(tr)?'Tap to select':'Empty')));
-    const head=h('div',{className:'th'},h('div',{className:'row'},name),h('div',{className:'row'},
+  const bar=$('#chips'),cur=selTrack();bar.textContent='';
+  for(const k of CHIPS){
+    const own=S.tracks.filter(t=>chipOf(t)===k);
+    for(const tr of own.length?own:[null]){const on=tr&&tr===cur;
+      bar.append(h('button',{className:'chip'+(tr?' has':'')+(on?' on':''),style:'--c:'+INST[k].color,textContent:INST[k].chip||INST[k].name,'aria-pressed':String(!!on),
+        title:tr?(on?'Show all instruments':'Bring this instrument to the front'):'Add this instrument',onclick:()=>chipPress(k,tr)}));}
+  }
+  const on=bar.querySelector('.on');if(on&&on.scrollIntoView)try{on.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
+  $('#empty').classList.toggle('hide',S.tracks.length>0);$('#boardBox').classList.toggle('hide',!S.tracks.length);
+  $('#allHint').classList.toggle('hide',!S.tracks.length||!!cur);$('#editHint').classList.toggle('hide',!cur||INST[cur.inst].kind==='audio');
+  if(B.cv)B.cv.style.touchAction=cur&&INST[cur.inst].kind!=='audio'?'none':'pan-y';
+  const box=$('#panel');box.textContent='';box.classList.toggle('hide',!cur);
+  if(cur){
+    const tr=cur,I=INST[tr.inst];box.style.setProperty('--c',I.color);
+    box.append(h('div',{className:'row'},h('div',{className:'tn'},I.name,h('small',{},'Next take goes here')),
       h('button',{className:'sm',textContent:'Mute','aria-pressed':String(tr.mute),onclick:e=>{tr.mute=!tr.mute;e.target.setAttribute('aria-pressed',tr.mute);save();}}),
       h('button',{className:'sm',textContent:'Solo','aria-pressed':String(tr.solo),onclick:e=>{tr.solo=!tr.solo;e.target.setAttribute('aria-pressed',tr.solo);}}),
       h('input',{type:'range',min:0,max:1,step:0.01,value:tr.vol,'aria-label':'Volume',oninput:e=>{tr.vol=+e.target.value;applyMix(tr);save();}})));
-    if(sel){
-      const row3=h('div',{className:'row'});
-      if(I.kind==='melodic'){
-        const s=h('select',{'aria-label':'Sound',onchange:e=>setInst(tr,e.target.value)}),groups={};
-        for(const k in INST){const J=INST[k];if(J.kind!=='melodic')continue;
-          if(!groups[J.group]){groups[J.group]=h('optgroup',{label:J.group});s.append(groups[J.group]);}
-          groups[J.group].append(h('option',{value:k,textContent:J.name,selected:k===tr.inst}));}
-        const oct=d=>()=>{tr.octave=clamp(tr.octave+d,-3,3);invalidate();renderTracks();};
-        row3.append(s,h('button',{className:'sm',textContent:'−','aria-label':'Octave down',onclick:oct(-1)}),h('span',{className:'oct'},'Oct '+(tr.octave>0?'+':'')+tr.octave),h('button',{className:'sm',textContent:'+','aria-label':'Octave up',onclick:oct(1)}));
-        if(I.env)row3.append(h('button',{className:'sm',textContent:'Dynamics',title:'Long notes follow how loud you sang them, such as a slow fade-in','aria-pressed':String(tr.dyn!==false),onclick:e=>{tr.dyn=tr.dyn===false;e.target.setAttribute('aria-pressed',tr.dyn);invalidate();}}));
-      }else if(I.kind==='drum'){
-        const s=h('select',{'aria-label':'Drum kit',onchange:e=>{tr.kit=e.target.value;save();renderTracks();preview(tr);}});
-        for(const k in KIT_NAMES)s.append(h('option',{value:k,textContent:KIT_NAMES[k],selected:k===tr.kit}));
-        row3.append(s);
-      }
-      const row4=h('div',{className:'row'},
-        h('button',{className:'sm',textContent:'EQ','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this track',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
-        h('button',{className:'sm',textContent:'Clear',title:'Empty this track',onclick:()=>{if(!hasContent(tr))return;keep(tr);tr.notes=[];tr.audio=null;tr.peaks=null;tr.buf=null;tr.lenBeats=0;invalidate();renderTracks();setStatus('Track cleared. “Undo last take” brings it back.',4000);}}));
-      if(I.kind==='audio'&&tr.audio)row4.append(h('button',{className:'sm',textContent:'WAV',title:'Export this voice track',onclick:()=>download(DSP.encodeWav([tr.audio.data],tr.audio.sr),'melodeas-voice-'+stamp()+'.wav','audio/wav')}));
-      row4.append(h('button',{className:'sm',textContent:'Delete',onclick:()=>removeTrack(tr)}));
-      if(row3.childNodes.length)head.append(row3);
-      head.append(row4);if(tr.eqOpen)head.append(eqPanel(tr));
+    const row3=h('div',{className:'row'});
+    if(I.kind==='melodic'){
+      const fam=FAMILY[chipOf(tr)];
+      if(fam){const s=h('select',{'aria-label':'Sound',onchange:e=>setInst(tr,e.target.value)});
+        for(const k of fam)s.append(h('option',{value:k,textContent:INST[k].name,selected:k===tr.inst}));row3.append(s);}
+      const oct=d=>()=>{tr.octave=clamp(tr.octave+d,-3,3);invalidate();renderTracks();};
+      row3.append(h('button',{className:'sm',textContent:'−','aria-label':'Octave down',onclick:oct(-1)}),h('span',{className:'oct'},'Oct '+(tr.octave>0?'+':'')+tr.octave),h('button',{className:'sm',textContent:'+','aria-label':'Octave up',onclick:oct(1)}));
+      if(I.env)row3.append(h('button',{className:'sm',textContent:'Dynamics',title:'Long notes follow how loud you sang them, such as a slow fade-in','aria-pressed':String(tr.dyn!==false),onclick:e=>{tr.dyn=tr.dyn===false;e.target.setAttribute('aria-pressed',tr.dyn);invalidate();}}));
+    }else if(I.kind==='drum'){
+      const s=h('select',{'aria-label':'Drum kit',onchange:e=>{tr.kit=e.target.value;save();renderTracks();preview(tr);}});
+      for(const k in KIT_NAMES)s.append(h('option',{value:k,textContent:KIT_NAMES[k],selected:k===tr.kit}));
+      row3.append(s);
     }
-    const cv=h('canvas',{className:'lane'});tr.cv=cv;wireLane(tr,cv);
-    ul.append(h('li',{className:'tr'+(sel?' sel':''),style:'--c:'+I.color},head,h('div',{className:'lanebox'},cv)));
+    row3.append(
+      h('button',{className:'sm',textContent:'EQ','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this track',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
+      h('button',{className:'sm',textContent:'Clear',title:'Empty this track',onclick:()=>{if(!hasContent(tr))return;keep(tr);tr.notes=[];tr.audio=null;tr.peaks=null;tr.buf=null;tr.lenBeats=0;invalidate();renderTracks();setStatus('Track cleared. “Undo last change” brings it back.',4000);}}));
+    if(I.kind==='audio'&&tr.audio)row3.append(h('button',{className:'sm',textContent:'WAV',title:'Export this voice track',onclick:()=>download(DSP.encodeWav([tr.audio.data],tr.audio.sr),'melodeas-voice-'+stamp()+'.wav','audio/wav')}));
+    row3.append(h('button',{className:'sm',textContent:'Delete',onclick:()=>removeTrack(tr)}));
+    box.append(row3);if(tr.eqOpen)box.append(eqPanel(tr));
   }
   idleStatus();
 }
@@ -803,7 +829,7 @@ function syncControls(){
 }
 function init(){
   const key=$('#key');key.append(h('option',{value:'auto',textContent:'Auto'}));NOTE_NAMES.forEach((n,i)=>key.append(h('option',{value:String(i),textContent:n})));
-  for(const k of CHIPS)$('#chips').append(h('button',{className:'chip',style:'--c:'+INST[k].color,textContent:INST[k].chip||INST[k].name,onclick:()=>addTrack(k)}));
+  wireBoard($('#board'));
   try{const s=localStorage.getItem('melodeas.v1');if(s)restore(JSON.parse(s));}catch(e){}
   syncControls();renderTracks();
 
@@ -871,7 +897,7 @@ function frame(){
   $('#ring').style.strokeDashoffset=RING*(1-frac);
   const bi=T.playing&&beat>-4?((Math.floor(beat)%4)+4)%4:-1;
   for(let i=0;i<4;i++)dots[i].className=i===bi?(i===0?'on one':'on'):'';
-  for(const tr of S.tracks)drawLane(tr,pos,LB);
+  drawBoard(pos,LB);
   if(analyser&&$('#settings').open){analyser.getFloatTimeDomainData(meterBuf);let m=0;for(let i=0;i<meterBuf.length;i++){const a=Math.abs(meterBuf[i]);if(a>m)m=a;}$('#meter').value=m;}
 }
 

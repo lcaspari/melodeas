@@ -20,10 +20,12 @@ https://melodeas.net, served over https, so the microphone works in every browse
 
 ## Use
 
-1. Pick a sound under "Add a track".
+1. Tap an instrument in the bar at the top. It is added and comes to the front.
 2. Press the red button. You get a one-bar count-in, then one round of the loop to perform.
-3. The take is converted and starts looping. Add the next track and repeat. Recording again into a track adds to what is already there; "Clear" on the track empties it and "Undo last change" steps back.
-4. "Export MIDI file" writes a `.mid` with one track per instrument, tempo and velocities.
+3. The take is converted and starts looping. Tap the next instrument and repeat. Recording again into an instrument adds to what is already there; "Clear" empties it and "Undo last change" in the menu steps back.
+4. "Export MIDI" in the menu writes a `.mid` with one track per instrument, tempo and velocities.
+
+All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) under the board; the others are grey behind it. Tap the selected instrument again to see everything in colour.
 
 What to perform:
 
@@ -38,7 +40,7 @@ What to perform:
 
 ## Sounds
 
-Select a track to see its controls. All sounds are synthesised in the browser (Web Audio), with reverb and echo.
+Select an instrument to see its controls. All sounds are synthesised in the browser (Web Audio), with reverb and echo.
 
 - **Drum kits:** Punchy, 808, Boom bap, Trap.
 - **Bass:** Synth bass, Sub bass, 808 bass, Reese bass, Acid bass.
@@ -53,7 +55,7 @@ Select a track to see its controls. All sounds are synthesised in the browser (W
 
 ## Editing notes
 
-In the selected track: drag a note to move it in time and pitch (or between drums), drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Clicking a drum hit switches the drum.
+In the selected instrument: drag a note to move it in time and pitch (or between drums), drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Clicking a drum hit switches the drum.
 
 "Snap timing to" and "Snap pitch to" can be changed after recording; the original performance is kept.
 

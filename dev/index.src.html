@@ -36,7 +36,7 @@ button{cursor:pointer;touch-action:manipulation}
 .icon:hover{background:var(--panel)}
 .icon svg{width:24px;height:24px;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;fill:none}
 
-main{padding-top:16px;padding-bottom:calc(190px + var(--safe-b))}
+main{padding-top:12px;padding-bottom:calc(190px + var(--safe-b))}
 
 /* bottom dock */
 .dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b);box-shadow:0 -10px 30px rgba(0,0,0,.35)}
@@ -84,40 +84,37 @@ input[type=number]{width:74px}
 .bpm{font-size:20px;font-weight:700;color:var(--text);min-width:50px;text-align:center}
 meter{width:120px;height:12px}
 
-/* tracks */
-#tracks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
-.tr{display:grid;grid-template-columns:280px 1fr;background:var(--panel);border-radius:var(--r);overflow:hidden;border-left:6px solid var(--c)}
-.tr.sel{box-shadow:0 0 0 2px var(--c)}
-.th{padding:9px 10px;display:flex;flex-direction:column;gap:7px;min-width:0}
+/* instrument bar */
+.bar{border-top:1px solid var(--line)}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-top:8px;padding-bottom:8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:36px;border-radius:18px;border:2px solid var(--c);background:none;color:var(--text);padding:0 14px;font-size:14px;font-weight:600;white-space:nowrap}
+.chip:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
+.chip.has{background:var(--c);color:#1C1C1C}
+.chip.has:hover{background:var(--c)}
+.chip.on{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text)}
+.bar.nudge .chips{animation:nudge .5s 2}
+@keyframes nudge{50%{transform:translateX(6px)}}
+
+/* board and the panel of the selected instrument */
+.board{position:relative;height:clamp(240px,calc(100dvh - 500px),460px);background:var(--lane);border-radius:var(--r);overflow:hidden}
+canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;touch-action:pan-y}
+.panel{margin-top:10px;background:var(--panel);border-radius:var(--r);border-left:6px solid var(--c);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .th .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tn{font-weight:700;font-size:15px;background:none;border:0;padding:0;text-align:left;color:var(--text)}
+.tn{font-weight:700;font-size:15px;margin-right:6px}
 .tn small{display:block;font-weight:500;font-size:12px;color:var(--c)}
-.sm{height:28px;min-width:28px;border-radius:6px;border:1px solid var(--line);background:var(--lane);font-size:12px;padding:0 6px;color:var(--text)}
+.sm{height:30px;min-width:30px;border-radius:6px;border:1px solid var(--line);background:var(--lane);font-size:12.5px;padding:0 8px;color:var(--text)}
 .sm[aria-pressed=true]{background:var(--c);color:#1C1C1C;border-color:var(--c);font-weight:700}
-.th select{height:28px;font-size:12.5px;padding:0 4px;max-width:150px}
+.th select{height:30px;font-size:12.5px;padding:0 4px;max-width:150px}
 .eq{display:grid;grid-template-columns:auto 1fr auto;gap:5px 8px;align-items:center;font-size:12px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px}
 .th .eq input[type=range]{width:100%;min-width:0}
-.th .eq{flex:1 1 100%}
 .eq output{color:var(--text);min-width:52px;text-align:right}
 .eq .sm{grid-column:1/-1;justify-self:start}
 .hint{color:var(--soft);font-size:13.5px;line-height:1.5;margin:10px 0 0;max-width:80ch}
-.th input[type=range]{width:74px;accent-color:var(--c)}
+.th input[type=range]{width:90px;accent-color:var(--c)}
 .oct{font-size:12px;color:var(--soft)}
-.lanebox{position:relative;min-height:76px;background:var(--lane)}
-.tr.sel .lanebox{min-height:176px}
-.tr.sel canvas.lane{touch-action:none}
-canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
 .empty{margin:0;padding:22px;border:2px dashed var(--line);border-radius:var(--r);color:var(--soft);font-size:16px;line-height:1.45}
 .empty strong{display:block;color:var(--text);font-size:19px;margin-bottom:4px}
-
-.add{margin-top:18px}
-.add h2{font-size:15px;font-weight:700;margin:0 0 8px}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{height:40px;border-radius:20px;border:2px solid var(--c);background:none;color:var(--text);padding:0 14px 0 10px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
-.chip::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--c)}
-.chip:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
-.add.nudge .chips{animation:nudge .5s 2}
-@keyframes nudge{50%{transform:translateX(6px)}}
 
 .support{margin-top:30px;border-top:1px solid var(--line);padding-top:16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;color:var(--soft);font-size:14px}
 .support p{margin:0;flex:1 1 260px;line-height:1.45}
@@ -166,8 +163,6 @@ dialog .icon{margin-right:-10px}
 @media (max-width:720px){
   #settings{margin:auto 0 0;width:100%;border-radius:20px 20px 0 0;max-height:90vh;max-height:90dvh}
   #settings[open]{animation-name:fromBottom}
-  .tr{grid-template-columns:1fr}
-  .th{flex-direction:row;flex-wrap:wrap;align-items:center}
   .ctl{gap:8px}
   .play,.tempo{min-width:84px}
   main{padding-bottom:calc(178px + var(--safe-b))}
@@ -177,7 +172,7 @@ dialog .icon{margin-right:-10px}
   .rec{width:96px;height:96px}
 }
 @media (prefers-reduced-motion:reduce){
-  .rec[data-state=armed] .dot,.add.nudge .chips{animation:none}
+  .rec[data-state=armed] .dot,.bar.nudge .chips{animation:none}
   #menu[open],#settings[open]{animation:none}
 }
 </style>
@@ -191,17 +186,15 @@ dialog .icon{margin-right:-10px}
     </div>
     <button class="icon" id="menuBtn" aria-label="Menu" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
+  <nav class="bar" id="add" aria-label="Instruments"><div class="inner chips" id="chips"></div></nav>
 </header>
 
 <main class="inner">
-  <ul id="tracks"></ul>
-  <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>No tracks yet. Pick a sound below, press the red button, and perform one round of the loop.</p>
-  <p class="hint hide" id="editHint">In the selected track: drag a note to move it, drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Click a drum hit to switch drum. Recording again adds to what is there.</p>
-
-  <section class="add" id="add">
-    <h2>Add a track</h2>
-    <div class="chips" id="chips"></div>
-  </section>
+  <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>Pick an instrument at the top, press the red button, and perform one round of the loop.</p>
+  <div class="board hide" id="boardBox"><canvas id="board" class="lane"></canvas></div>
+  <p class="hint hide" id="allHint">All instruments are shown. Tap one at the top to bring it to the front, record into it or edit it. Tap it again to come back here.</p>
+  <section class="panel th hide" id="panel" aria-label="Selected instrument"></section>
+  <p class="hint hide" id="editHint">Drag a note to move it, drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Click a drum hit to switch drum. Recording again adds to what is there.</p>
 
   <footer class="support">
     <p>Melodeas is free. If it helps you catch ideas, you can chip in.</p>

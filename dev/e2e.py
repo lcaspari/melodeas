@@ -95,7 +95,7 @@ async def main():
         check('mix export produces a WAV', bool(n) and n.endswith('.wav'), n)
 
         # ---- 4a. second take on the drum track adds to the first
-        await page.click('.tr >> nth=0 >> .tn')
+        await page.click('.chip:has-text("Kick + snare")')
         await page.click('#rec'); await wait_state(page,'armed')
         await page.evaluate("()=>{ const m=window.melodeas, sp=60/m.S.bpm; window.__burst('snare', m.R.tStart+1.5*sp, 0.5); window.__burst('snare', m.R.tStart+5.5*sp, 0.5); }")
         await wait_state(page,'idle')
@@ -105,8 +105,8 @@ async def main():
         await menu_do(page,'#undo'); n2 = await page.evaluate("window.melodeas.S.tracks[0].notes.length")
         check('undo removes the overdub', n2==9, n2)
         # ---- 4b. drag a bass note one beat right and two semitones up; add and remove notes
-        await page.click('.tr >> nth=1 >> .tn'); await page.wait_for_timeout(300)
-        geo = "()=>{const tr=window.melodeas.S.tracks[1]; tr.cv.scrollIntoView({block:'center'}); const r=tr.cv.getBoundingClientRect(), q=tr.rects[1]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2,left:r.left,top:r.top,beat:tr.geom.w/tr.geom.LB,rh:tr.geom.rh,hh:tr.geom.hh,lo:tr.geom.lo,n:q.n}}"
+        await page.click('.chip:has-text("Bass")'); await page.wait_for_timeout(300)
+        geo = "()=>{const tr=window.melodeas.S.tracks[1]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[1]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2,left:r.left,top:r.top,beat:tr.geom.w/tr.geom.LB,rh:tr.geom.rh,hh:tr.geom.hh,lo:tr.geom.lo,n:q.n}}"
         g = await page.evaluate(geo); await page.wait_for_timeout(100); g = await page.evaluate(geo)
         await page.mouse.move(g['x'],g['y']); await page.mouse.down(); await page.mouse.move(g['x']+g['beat']*0.5,g['y']-g['rh'],steps=4); await page.mouse.move(g['x']+g['beat'],g['y']-2*g['rh'],steps=4); await page.mouse.up()
         notes = await page.evaluate("window.melodeas.S.tracks[1].notes")
@@ -119,12 +119,12 @@ async def main():
         await page.wait_for_timeout(450); await page.mouse.dblclick(ax+3,ay); n3 = await page.evaluate("window.melodeas.S.tracks[1].notes.length")
         check('double-click removes it again', n3==7, n3)
         # ---- 4c. sound, EQ and reverb per track
-        await page.select_option('.tr.sel select[aria-label="Sound"]','bass808')
+        await page.select_option('#panel select[aria-label="Sound"]','bass808')
         r = await page.evaluate("(()=>{const t=window.melodeas.S.tracks[1];return {inst:t.inst,eq:t.eq,oct:t.octave,hp:t.nodes&&t.nodes.hp.frequency.value}})()")
         check('sound change applies that sound\'s default EQ', r['inst']=='bass808' and r['eq']=={'hp':25,'lp':4000} and r['oct']==-1 and abs(r['hp']-25)<0.01, r)
-        await page.click('.tr.sel button:has-text("EQ")')
-        await page.evaluate("()=>{const i=document.querySelector('.tr.sel input[aria-label=\"Low cut\"]'); i.value=0.5; i.dispatchEvent(new Event('input',{bubbles:true}));}")
-        r = await page.evaluate("(()=>{const t=window.melodeas.S.tracks[1];return {eq:t.eq,hp:t.nodes.hp.frequency.value,txt:document.querySelector('.tr.sel .eq output').textContent}})()")
+        await page.click('#panel button:has-text("EQ")')
+        await page.evaluate("()=>{const i=document.querySelector('#panel input[aria-label=\"Low cut\"]'); i.value=0.5; i.dispatchEvent(new Event('input',{bubbles:true}));}")
+        r = await page.evaluate("(()=>{const t=window.melodeas.S.tracks[1];return {eq:t.eq,hp:t.nodes.hp.frequency.value,txt:document.querySelector('#panel .eq output').textContent}})()")
         check('EQ low cut slider moves the filter', 135<r['hp']<150 and r['txt'].endswith('Hz'), r)
         await page.screenshot(path='shot-edit.png', full_page=True)
         # ---- 5. free first take sets tempo
@@ -158,7 +158,7 @@ async def main():
         notes = await page.evaluate("window.melodeas.S.tracks[0].notes")
         check('only "p" sounds: all four are kicks', len(notes)==4 and all(n['drum']=='kick' for n in notes), ' '.join(f"{n['drum']}@{round(2**n['f'])}Hz" for n in notes))
         # correct one to snare by clicking it: later takes of that sound follow the correction
-        g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; tr.cv.scrollIntoView({block:'center'}); const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2}}")
+        g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2}}")
         g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2}}")
         await page.wait_for_timeout(400); await page.mouse.click(g['x'],g['y'])
         r = await page.evaluate("({d:window.melodeas.S.tracks[0].notes[0].drum,l:window.melodeas.S.learned.length})")
