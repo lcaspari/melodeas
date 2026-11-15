@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Melodeas</title>
+<link rel="icon" href="data:,">
+<style>
+:root{
+  --bg:#211E42; --panel:#2C2857; --lane:#181634; --line:#4B4688; --text:#F4F1FF; --soft:#ABA5DA;
+  --rec:#FF5D5D; --go:#FFD23F; --r:10px;
+  font-family:"Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif; color:var(--text); background:var(--bg);
+  font-variant-numeric:tabular-nums;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg)}
+main{max-width:1080px;margin:0 auto;padding:20px 16px 56px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--go);outline-offset:2px}
+
+.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.top h1{font-size:30px;font-weight:800;letter-spacing:-.03em;margin:0}
+.top p{margin:0;color:var(--soft);font-size:15px}
+
+.deck{display:grid;grid-template-columns:auto 1fr;gap:18px 22px;align-items:center;background:var(--panel);border-radius:18px;padding:18px 20px}
+.big{display:flex;align-items:center;gap:14px}
+.rec{position:relative;width:104px;height:104px;border-radius:50%;border:0;background:none;padding:0;flex:none}
+.rec svg{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+.rec .track{fill:none;stroke:var(--lane);stroke-width:7}
+.rec .prog{fill:none;stroke:var(--go);stroke-width:7;stroke-linecap:round;stroke-dasharray:289;stroke-dashoffset:289}
+.rec .dot{position:absolute;inset:19px;border-radius:50%;background:var(--rec);display:grid;place-items:center;font-weight:700;font-size:15px;color:#3a0b0b;transition:border-radius .15s,inset .15s}
+.rec[data-state=armed] .dot{animation:blink .5s steps(2) infinite}
+.rec[data-state=recording] .dot{inset:31px;border-radius:9px}
+.rec[data-state=recording] .prog{stroke:var(--rec)}
+.rec[data-state=analysing] .dot{opacity:.5}
+@keyframes blink{50%{opacity:.35}}
+.play{height:52px;min-width:86px;border-radius:26px;border:2px solid var(--go);background:none;color:var(--go);font-weight:700;font-size:16px;padding:0 18px}
+.play[aria-pressed=true]{background:var(--go);color:#2a2400}
+
+.now{min-width:0}
+.beats{display:flex;gap:8px;margin-bottom:8px}
+.beats i{width:14px;height:14px;border-radius:50%;background:var(--lane)}
+.beats i.on{background:var(--go)}
+.beats i.on.one{background:var(--text)}
+.status{margin:0;font-size:18px;line-height:1.35;font-weight:600;min-height:2.7em}
+
+.opts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:12px 18px;border-top:1px solid var(--line);padding-top:14px}
+.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--soft)}
+.f>div{display:flex;gap:4px;align-items:center}
+select,input[type=number]{height:34px;border-radius:8px;border:1px solid var(--line);background:var(--lane);padding:0 8px;font-size:14px;color:var(--text)}
+input[type=number]{width:74px}
+.btn{height:34px;border-radius:8px;border:1px solid var(--line);background:var(--lane);padding:0 12px;font-size:14px;color:var(--text)}
+.btn:hover{border-color:var(--soft)}
+.btn[aria-pressed=true]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.btn:disabled,select:disabled,input:disabled{opacity:.45;cursor:default}
+.seg{display:flex}
+.seg .btn{border-radius:0}
+.seg .btn:first-child{border-radius:8px 0 0 8px}
+.seg .btn:last-child{border-radius:0 8px 8px 0;border-left:0}
+.bpm{font-size:20px;font-weight:700;color:var(--text);min-width:50px;text-align:center}
+
+#tracks{list-style:none;margin:18px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.tr{display:grid;grid-template-columns:280px 1fr;background:var(--panel);border-radius:var(--r);overflow:hidden;border-left:6px solid var(--c)}
+.tr.sel{box-shadow:0 0 0 2px var(--c)}
+.th{padding:9px 10px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.th .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tn{font-weight:700;font-size:15px;background:none;border:0;padding:0;text-align:left;color:var(--text)}
+.tn small{display:block;font-weight:500;font-size:12px;color:var(--c)}
+.sm{height:26px;min-width:26px;border-radius:6px;border:1px solid var(--line);background:var(--lane);font-size:12px;padding:0 6px;color:var(--text)}
+.sm[aria-pressed=true]{background:var(--c);color:#16142e;border-color:var(--c);font-weight:700}
+.th select{height:26px;font-size:12.5px;padding:0 4px;max-width:150px}
+.eq{display:grid;grid-template-columns:auto 1fr auto;gap:5px 8px;align-items:center;font-size:12px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px}
+.th .eq input[type=range]{width:100%;min-width:0}
+.th .eq{flex:1 1 100%}
+.eq output{color:var(--text);min-width:52px;text-align:right}
+.eq .sm{grid-column:1/-1;justify-self:start}
+.hint{color:var(--soft);font-size:13.5px;line-height:1.5;margin:10px 0 0;max-width:80ch}
+.th input[type=range]{width:74px;accent-color:var(--c)}
+.oct{font-size:12px;color:var(--soft)}
+.lanebox{position:relative;min-height:76px;background:var(--lane)}
+.tr.sel .lanebox{min-height:176px}
+.tr.sel canvas.lane{touch-action:none}
+canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
+.empty{margin:18px 0 0;padding:22px;border:2px dashed var(--line);border-radius:var(--r);color:var(--soft);font-size:16px}
+
+.add{margin-top:14px}
+.add h2,.out h2{font-size:15px;font-weight:700;margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{height:38px;border-radius:19px;border:2px solid var(--c);background:none;color:var(--text);padding:0 14px 0 10px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px}
+.chip::before{content:"";width:12px;height:12px;border-radius:50%;background:var(--c)}
+.chip:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
+.add.nudge .chips{animation:nudge .5s 2}
+@keyframes nudge{50%{transform:translateX(6px)}}
+
+.out{margin-top:26px;border-top:1px solid var(--line);padding-top:16px}
+.out .rowb{display:flex;flex-wrap:wrap;gap:8px}
+.primary{background:var(--go);color:#2a2400;border-color:var(--go);font-weight:700}
+.note{color:var(--soft);font-size:13.5px;line-height:1.5;max-width:70ch;margin:10px 0 0}
+details{margin-top:16px}
+summary{cursor:pointer;font-weight:700;font-size:15px}
+.set{display:flex;flex-wrap:wrap;gap:14px 22px;margin-top:12px;align-items:flex-end}
+meter{width:120px;height:12px}
+.hide{display:none!important}
+
+@media (max-width:720px){
+  .deck{grid-template-columns:1fr}
+  .tr{grid-template-columns:1fr}
+  .th{flex-direction:row;flex-wrap:wrap;align-items:center}
+  .status{font-size:16px}
+}
+@media (prefers-reduced-motion:reduce){.rec[data-state=armed] .dot,.add.nudge .chips{animation:none}}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Melodeas</h1>
+    <p>Sing it or beatbox it. It comes back as an instrument.</p>
+  </header>
+
+  <section class="deck" aria-label="Loop controls">
+    <div class="big">
+      <button id="rec" class="rec" data-state="idle" aria-label="Record">
+        <svg viewBox="0 0 104 104" aria-hidden="true"><circle class="track" cx="52" cy="52" r="46"/><circle id="ring" class="prog" cx="52" cy="52" r="46"/></svg>
+        <span class="dot" id="recdot"></span>
+      </button>
+      <button id="play" class="play" aria-pressed="false">Play</button>
+    </div>
+    <div class="now">
+      <div class="beats" id="beats" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <p class="status" id="status" aria-live="polite"></p>
+    </div>
+
+    <div class="opts">
+      <div class="f"><span>Tempo</span><div>
+        <button class="btn" id="bpmDown" aria-label="Slower">−</button><span class="bpm" id="bpm">96</span><button class="btn" id="bpmUp" aria-label="Faster">+</button>
+        <button class="btn" id="tap">Tap</button></div></div>
+      <label class="f"><span>Loop length</span><select id="bars"><option value="1">1 bar</option><option value="2">2 bars</option><option value="4">4 bars</option><option value="8">8 bars</option><option value="16">16 bars</option></select></label>
+      <label class="f"><span>Snap timing to</span><select id="grid"><option value="0.25">16th notes</option><option value="0.5">8th notes</option><option value="0.3333333333">8th triplets</option><option value="0.1666666667">16th triplets</option><option value="0">Nothing (as performed)</option></select></label>
+      <label class="f"><span>Snap pitch to</span><select id="scale"><option value="off">Nearest semitone</option><option value="major">Major scale</option><option value="minor">Minor scale</option><option value="majpent">Major pentatonic</option><option value="minpent">Minor pentatonic</option><option value="dorian">Dorian</option><option value="mixo">Mixolydian</option><option value="blues">Blues</option></select></label>
+      <label class="f" id="keyF"><span>Key</span><select id="key"></select></label>
+      <div class="f"><span>Metronome</span><div><button class="btn" id="click" aria-pressed="true">Click</button></div></div>
+      <div class="f"><span>You are listening on</span><div class="seg"><button class="btn" data-listen="speakers">Speakers</button><button class="btn" data-listen="headphones">Headphones</button></div></div>
+      <div class="f"><span>First take</span><div class="seg"><button class="btn" data-first="metronome">Follow the click</button><button class="btn" data-first="free">Set the tempo</button></div></div>
+    </div>
+  </section>
+
+  <ul id="tracks"></ul>
+  <p class="empty" id="empty">No tracks yet. Pick a sound below, press the red button, and sing or beatbox one round of the loop.</p>
+  <p class="hint hide" id="editHint">In the selected track: drag a note to move it, drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Click a drum hit to switch drum. Recording again adds to what is there.</p>
+
+  <section class="add" id="add">
+    <h2>Add a track</h2>
+    <div class="chips" id="chips"></div>
+  </section>
+
+  <section class="out">
+    <h2>Take it to Ableton</h2>
+    <div class="rowb">
+      <button class="btn primary" id="expMidi">Export MIDI file</button>
+      <button class="btn" id="expMix">Export mix as WAV</button>
+      <button class="btn" id="saveProj">Save project</button>
+      <button class="btn" id="openProj">Open project</button>
+      <button class="btn" id="undo">Undo last change</button>
+      <button class="btn" id="clearAll">Clear everything</button>
+      <input type="file" id="file" accept=".json,application/json" class="hide">
+    </div>
+    <p class="note">The MIDI file has one track per instrument, the tempo, and every note's velocity. Drag it into Ableton's Session view and each track lands as its own clip. Drums use the General MIDI layout (kick C1, snare D1, closed hat F♯1, open hat A♯1), which is where most Ableton drum racks keep them. Voice tracks are audio, so they export as WAV from their own track.</p>
+
+    <details id="settings">
+      <summary>Settings</summary>
+      <div class="set">
+        <div class="f"><span>Mic level</span><div><meter id="meter" min="0" max="1" low="0.02" high="0.7" optimum="0.3" value="0"></meter><button class="btn" id="micOn">Turn mic on</button></div></div>
+        <label class="f"><span>Mic sensitivity</span><select id="sens"><option value="0.6">Low (noisy room)</option><option value="1">Normal</option><option value="1.8">High (quiet voice)</option></select></label>
+        <div class="f"><span>Timing offset, ms</span><div><input type="number" id="lat" min="0" max="500" step="1" placeholder="auto"><button class="btn" id="latAuto">Auto</button><button class="btn" id="calib">Measure with speakers</button></div></div>
+      </div>
+      <p class="note" id="latNote">The timing offset is how long sound takes to leave the speakers and come back through the mic. If your notes land late or early against the click, measure it once: turn the speakers up and press “Measure with speakers”.</p>
+    </details>
+  </section>
+</main>
+
+<script>
+/*__DSP__*/
+</script>
+<script>
+/*__APP__*/
+</script>
+</body>
+</html>

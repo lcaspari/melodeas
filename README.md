@@ -1,0 +1,68 @@
+# Melodeas
+
+A loop station you play with your voice. Sing or beatbox a track, and it comes back as MIDI notes played by an instrument. Export the loop as a MIDI file for Ableton.
+
+Everything is in `index.html`. No install, no build step, no network.
+
+## Online
+
+https://lcaspari.github.io/melodeas/ (once GitHub Pages is switched on for the repository). Served over https, so the microphone works in every browser and on a phone.
+
+## Start from this folder
+
+- **Chrome or Edge:** open `index.html` and allow the microphone.
+- **Safari or Firefox:** double-click `start.command` (it serves the folder on http://localhost:8123 and opens it). These browsers only give microphone access to localhost or https pages.
+
+## Use
+
+1. Pick a sound under "Add a track".
+2. Press the red button. You get a one-bar count-in, then one round of the loop to perform.
+3. The take is converted and starts looping. Add the next track and repeat. Recording again into a track adds to what is already there; "Clear" on the track empties it and "Undo last change" steps back.
+4. "Export MIDI file" writes a `.mid` with one track per instrument, tempo and velocities.
+
+What to perform:
+
+| Track | What to do |
+| --- | --- |
+| Kick + snare | "p" or "b" for kick, "k" for snare |
+| Hi-hat | "ts ts"; a long "tsss" becomes an open hat |
+| Full kit | "p", "k" and "ts" in one take |
+| Bass, Lead, Pluck, Keys, Pad, Brass | sing or hum, one note at a time |
+| Voice | recorded as audio, not converted |
+
+## Sounds
+
+Select a track to see its controls. All sounds are synthesised in the browser (Web Audio), with reverb and echo.
+
+- **Drum kits:** Punchy, 808, Boom bap, Trap.
+- **Bass:** Synth bass, Sub bass, 808 bass, Reese bass, Acid bass.
+- **Lead:** Supersaw, Square lead, Pluck, FM bell.
+- **Keys:** Electric piano, Piano, Lo-fi keys, Organ.
+- **Pads and brass:** Warm pad, Strings, Synth brass, Trumpet.
+
+**EQ** on a track opens a low cut, a high cut and a reverb amount. Every sound starts with a default that follows common mixing practice (for example hi-hats cut below 450 Hz, leads below 140 Hz, sub bass above 1.5 kHz, bass and kick with no reverb).
+
+## Editing notes
+
+In the selected track: drag a note to move it in time and pitch (or between drums), drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Clicking a drum hit switches the drum.
+
+"Snap timing to" and "Snap pitch to" can be changed after recording; the original performance is kept.
+
+## Choices made in this version
+
+- **Tempo:** the default is a metronome with a count-in, because it is the most reliable. "First take: Set the tempo" is the loop-pedal way: no click, press the button again on the first beat of the next round, and the tempo and bar count are worked out from the take.
+- **Speakers:** in "Speakers" mode the loop is turned down while recording and the browser's echo cancelling is switched on. "Headphones" turns both off and gives the cleanest detection.
+- **Timing offset:** sound takes time to leave the speakers and return through the mic. The page estimates this; "Measure with speakers" in Settings measures it properly.
+- **Detection:** onsets come from spectral flux, drums are sorted by brightness (dark = kick, mid = snare, bright = hat), pitch comes from the YIN algorithm. Velocity follows how loud each hit or note was.
+- **Kick or snare:** a take with only one kind of sound on a Kick + snare track is read as kick unless it is clearly bright. A second take is compared with the hits already on the track. When you correct a hit, that sound is remembered and later takes follow the correction.
+- **Each track keeps its own length**, so a 1-bar beat keeps repeating under a 4-bar bass line if you change "Loop length" between takes.
+
+## Known limits
+
+- One note at a time per melodic track (no chords).
+- Voice tracks are audio: they are not in the MIDI file (use the WAV button on the track), and the autosave in the browser does not keep them. "Save project" does.
+- Changing the tempo after recording a voice track plays it faster or slower, like tape.
+
+## Development
+
+`index.html` is built from the sources in `dev/`. See `dev/README.md`.
