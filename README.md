@@ -1,12 +1,17 @@
 # Melodeas
 
+[![Buy me a coffee](https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?style=for-the-badge&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/lcaspari)
+[![PayPal](https://img.shields.io/badge/PayPal-0070BA?style=for-the-badge&logo=paypal&logoColor=white)](https://paypal.me/LucaCaspari)
+
+Try it at **[melodeas.net](https://melodeas.net)**.
+
 A loop station you play with your voice. Sing or beatbox a track, and it comes back as MIDI notes played by an instrument. Export the loop as a MIDI file for Ableton.
 
 Everything is in `index.html`. No install, no build step, no network.
 
 ## Online
 
-https://lcaspari.github.io/melodeas/ (once GitHub Pages is switched on for the repository). Served over https, so the microphone works in every browser and on a phone.
+https://melodeas.net, served over https, so the microphone works in every browser and on a phone. The same site is also available at https://lcaspari.github.io/melodeas/.
 
 ## Start from this folder
 
@@ -56,12 +61,17 @@ In the selected track: drag a note to move it in time and pitch (or between drum
 - **Detection:** onsets come from spectral flux, drums are sorted by brightness (dark = kick, mid = snare, bright = hat), pitch comes from the YIN algorithm. Velocity follows how loud each hit or note was.
 - **Kick or snare:** a take with only one kind of sound on a Kick + snare track is read as kick unless it is clearly bright. A second take is compared with the hits already on the track. When you correct a hit, that sound is remembered and later takes follow the correction.
 - **Each track keeps its own length**, so a 1-bar beat keeps repeating under a 4-bar bass line if you change "Loop length" between takes.
+- **Playback:** each instrument track is rendered once into an audio buffer and looped, so many tracks play smoothly. Editing a track re-renders just that track in the background.
 
 ## Known limits
 
 - One note at a time per melodic track (no chords).
 - Voice tracks are audio: they are not in the MIDI file (use the WAV button on the track), and the autosave in the browser does not keep them. "Save project" does.
 - Changing the tempo after recording a voice track plays it faster or slower, like tape.
+
+## Support
+
+Melodeas is free. If it helps you catch ideas, you can [buy me a coffee](https://buymeacoffee.com/lcaspari) or send something via [PayPal](https://paypal.me/LucaCaspari).
 
 ## Development
 
