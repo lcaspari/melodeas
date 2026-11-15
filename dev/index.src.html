@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#211E42">
+<meta name="theme-color" content="#2B2B2B">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Melodeas">
 <title>Melodeas</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23211E42'/%3E%3Crect x='6' y='14' width='4.5' height='10' rx='2.25' fill='%23FFD23F'/%3E%3Crect x='13.75' y='7' width='4.5' height='18' rx='2.25' fill='%23FF5D5D'/%3E%3Crect x='21.5' y='11' width='4.5' height='13' rx='2.25' fill='%23ABA5DA'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232B2B2B'/%3E%3Crect x='6' y='14' width='4.5' height='10' rx='2.25' fill='%23FFB43A'/%3E%3Crect x='13.75' y='7' width='4.5' height='18' rx='2.25' fill='%23FF5D5D'/%3E%3Crect x='21.5' y='11' width='4.5' height='13' rx='2.25' fill='%23A8A8A8'/%3E%3C/svg%3E">
 <style>
 :root{
-  --bg:#211E42; --panel:#2C2857; --lane:#181634; --line:#4B4688; --text:#F4F1FF; --soft:#ABA5DA;
-  --rec:#FF5D5D; --go:#FFD23F; --r:10px;
+  --bg:#2B2B2B; --panel:#3A3A3A; --lane:#1C1C1C; --line:#585858; --text:#EFEFEF; --soft:#A8A8A8;
+  --rec:#FF5D5D; --go:#FFB43A; --r:10px;
   --safe-b:env(safe-area-inset-bottom,0px); --safe-t:env(safe-area-inset-top,0px);
   font-family:"Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif; color:var(--text); background:var(--bg);
   font-variant-numeric:tabular-nums;
@@ -39,7 +39,7 @@ button{cursor:pointer;touch-action:manipulation}
 main{padding-top:16px;padding-bottom:calc(190px + var(--safe-b))}
 
 /* bottom dock */
-.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b);box-shadow:0 -10px 30px rgba(10,8,30,.35)}
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--panel);border-top:1px solid var(--line);padding-bottom:var(--safe-b);box-shadow:0 -10px 30px rgba(0,0,0,.35)}
 .dock .inner{max-width:760px;padding-top:10px;padding-bottom:10px}
 .now{display:flex;align-items:center;gap:12px;min-height:38px}
 .beats{display:flex;gap:6px;flex:none}
@@ -61,7 +61,7 @@ main{padding-top:16px;padding-bottom:calc(190px + var(--safe-b))}
 .rec[data-state=analysing] .dot{opacity:.5}
 @keyframes blink{50%{opacity:.35}}
 .play{height:50px;min-width:92px;border-radius:25px;border:2px solid var(--go);background:none;color:var(--go);font-weight:700;font-size:16px;padding:0 20px}
-.play[aria-pressed=true]{background:var(--go);color:#2a2400}
+.play[aria-pressed=true]{background:var(--go);color:#2A1C00}
 .tempo{height:50px;min-width:92px;border-radius:14px;border:1px solid var(--line);background:var(--lane);padding:0 12px;display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05}
 .tempo:hover{border-color:var(--soft)}
 .tempo b{font-size:20px;font-weight:800}
@@ -93,7 +93,7 @@ meter{width:120px;height:12px}
 .tn{font-weight:700;font-size:15px;background:none;border:0;padding:0;text-align:left;color:var(--text)}
 .tn small{display:block;font-weight:500;font-size:12px;color:var(--c)}
 .sm{height:28px;min-width:28px;border-radius:6px;border:1px solid var(--line);background:var(--lane);font-size:12px;padding:0 6px;color:var(--text)}
-.sm[aria-pressed=true]{background:var(--c);color:#16142e;border-color:var(--c);font-weight:700}
+.sm[aria-pressed=true]{background:var(--c);color:#1C1C1C;border-color:var(--c);font-weight:700}
 .th select{height:28px;font-size:12.5px;padding:0 4px;max-width:150px}
 .eq{display:grid;grid-template-columns:auto 1fr auto;gap:5px 8px;align-items:center;font-size:12px;color:var(--soft);border-top:1px solid var(--line);padding-top:8px}
 .th .eq input[type=range]{width:100%;min-width:0}
@@ -123,12 +123,14 @@ canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer}
 .support p{margin:0;flex:1 1 260px;line-height:1.45}
 .link{display:inline-flex;align-items:center;height:40px;border-radius:20px;padding:0 16px;border:1px solid var(--line);color:var(--text);text-decoration:none;font-weight:600;font-size:14px;background:var(--panel)}
 .link:hover{border-color:var(--soft)}
-.link.coffee{background:var(--go);border-color:var(--go);color:#2a2400}
+.link.paypal{background:#0070BA;border-color:#0070BA;color:#fff}
+.link.paypal:hover{background:#0A82D2;border-color:#0A82D2}
+.link.coffee{background:var(--go);border-color:var(--go);color:#2A1C00}
 .note{color:var(--soft);font-size:13.5px;line-height:1.5;margin:10px 0 0}
 
 /* dialogs: menu drawer and settings sheet */
 dialog{border:0;padding:0;color:var(--text);background:var(--panel);max-height:none;max-width:none}
-dialog::backdrop{background:rgba(10,8,30,.62)}
+dialog::backdrop{background:rgba(0,0,0,.62)}
 dialog .box{padding:8px 18px calc(18px + var(--safe-b))}
 .dh{display:flex;align-items:center;justify-content:space-between;min-height:56px}
 .dh h2{margin:0;font-size:18px;font-weight:800}
@@ -140,9 +142,9 @@ dialog .icon{margin-right:-10px}
 .mi{display:block;width:100%;text-align:left;background:none;border:0;border-radius:10px;padding:11px 12px;margin:0 -12px;width:calc(100% + 24px);font-size:16px;font-weight:600}
 .mi:hover{background:var(--lane)}
 .mi small{display:block;font-weight:400;font-size:13px;color:var(--soft);margin-top:2px}
-.mi.main{background:var(--go);color:#2a2400;margin-bottom:6px}
-.mi.main small{color:#5a4d00}
-.mi.main:hover{background:#ffdc66}
+.mi.main{background:var(--go);color:#2A1C00;margin-bottom:6px}
+.mi.main small{color:#5A3F00}
+.mi.main:hover{background:#FFC566}
 .mgroup{border-top:1px solid var(--line);margin-top:10px;padding-top:10px}
 .mgroup h3{margin:4px 0 8px;font-size:13px;font-weight:700;color:var(--soft)}
 .mgroup .link{display:flex;justify-content:center;margin-top:8px}
@@ -184,7 +186,7 @@ dialog .icon{margin-right:-10px}
 <header class="appbar">
   <div class="inner">
     <div class="brand">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="14" width="6" height="11" rx="3" fill="#FFD23F"/><rect x="13" y="5" width="6" height="21" rx="3" fill="#FF5D5D"/><rect x="23" y="10" width="6" height="14" rx="3" fill="#ABA5DA"/></svg>
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="14" width="6" height="11" rx="3" fill="#FFB43A"/><rect x="13" y="5" width="6" height="21" rx="3" fill="#FF5D5D"/><rect x="23" y="10" width="6" height="14" rx="3" fill="#A8A8A8"/></svg>
       Melodeas
     </div>
     <button class="icon" id="menuBtn" aria-label="Menu" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
@@ -203,7 +205,7 @@ dialog .icon{margin-right:-10px}
 
   <footer class="support">
     <p>Melodeas is free. If it helps you catch ideas, you can chip in.</p>
-    <a class="link" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
+    <a class="link paypal" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
     <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
   </footer>
 </main>
@@ -240,7 +242,7 @@ dialog .icon{margin-right:-10px}
     <button class="mi" id="clearAll">Clear everything</button>
     <div class="mgroup">
       <h3>Support Melodeas</h3>
-      <a class="link" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
+      <a class="link paypal" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
       <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
     </div>
     <p class="keys">On a computer: Space plays and stops, R records.</p>

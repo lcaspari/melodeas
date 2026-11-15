@@ -32,6 +32,7 @@ What to perform:
 | Kick + snare | "p" or "b" for kick, "k" for snare |
 | Hi-hat | "ts ts"; a long "tsss" becomes an open hat |
 | Full kit | "p", "k" and "ts" in one take |
+| Toms | "dum dum" at different pitches; each tom is tuned to the note you sing |
 | Bass, Lead, Pluck, Keys, Pad, Brass | sing or hum, one note at a time |
 | Voice | recorded as audio, not converted |
 
@@ -44,6 +45,9 @@ Select a track to see its controls. All sounds are synthesised in the browser (W
 - **Lead:** Supersaw, Square lead, Pluck, FM bell.
 - **Keys:** Electric piano, Piano, Lo-fi keys, Organ.
 - **Pads and brass:** Warm pad, Strings, Synth brass, Trumpet.
+- **Percussion:** Toms.
+
+**Dynamics:** on sounds with long notes (pads, strings, brass, organ, sustained basses and leads) each note follows how loud you sang it, so a slow fade-in stays a fade-in. The "Dynamics" button on the track switches this off. In the MIDI file it is written as expression (CC 11).
 
 **EQ** on a track opens a low cut, a high cut and a reverb amount. Every sound starts with a default that follows common mixing practice (for example hi-hats cut below 450 Hz, leads below 140 Hz, sub bass above 1.5 kHz, bass and kick with no reverb).
 

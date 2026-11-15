@@ -220,7 +220,13 @@ function detectNotes(x,sr,sens){
     const a=2*Math.PI*(n.p-Math.floor(n.p));sx+=n.d*Math.cos(a);sy+=n.d*Math.sin(a);sw+=n.d;}
   // Singers without a reference drift off A440 as a whole: shift everything by the shared offset
   if(Math.hypot(sx,sy)/sw>0.6){const off=Math.atan2(sy,sx)/(2*Math.PI);for(const n of notes)n.p-=off;}
-  for(const n of notes){const dB=20*Math.log10(n.level/lmax);n.v=Math.round(clamp(112+dB*3,30,127));delete n.level;}
+  for(const n of notes){const dB=20*Math.log10(n.level/lmax);n.v=Math.round(clamp(112+dB*3,30,127));delete n.level;
+    if(n.d>=0.25){ // loudness curve inside a long note: 8 points, 1 = its loudest part
+      const K=8,i0=Math.max(0,Math.round(n.t*sr)),i1=Math.min(x.length,Math.round((n.t+n.d)*sr)),e=[];let mx=0;
+      for(let k=0;k<K;k++){const a=i0+Math.floor((i1-i0)*k/K),b=i0+Math.floor((i1-i0)*(k+1)/K);let q=0;for(let i=a;i<b;i++)q+=x[i]*x[i];e.push(Math.sqrt(q/Math.max(1,b-a)));}
+      const sm=e.map((v,k)=>k===0||k===K-1?v:0.25*e[k-1]+0.5*v+0.25*e[k+1]);for(const v of sm)if(v>mx)mx=v;
+      if(mx>0)n.env=sm.map(v=>Math.round(clamp(v/mx,0.02,1)*100)/100);
+    }}
   return notes;
 }
 
@@ -300,13 +306,17 @@ function buildMidi(song){
     for(const n of tr.notes){
       const on=clamp(Math.round(n.t*PPQ),0,loopTicks-1);
       const off=clamp(Math.round((n.t+n.d)*PPQ),on+1,loopTicks);
-      ev.push({tick:on,on:1,n:clamp(n.n|0,0,127),v:clamp(n.v|0,1,127)},{tick:off,on:0,n:clamp(n.n|0,0,127),v:64});
+      ev.push({tick:on,on:2,n:clamp(n.n|0,0,127),v:clamp(n.v|0,1,127)},{tick:off,on:0,n:clamp(n.n|0,0,127),v:64});
+      if(tr.expr){ // loudness inside the note as MIDI expression (CC 11)
+        if(n.env)n.env.forEach((g,k)=>ev.push({tick:clamp(on+Math.round((off-on)*(k?k+0.5:0)/n.env.length),on,off-1),on:1,cc:11,v:clamp(Math.round(127*g),1,127)}));
+        else ev.push({tick:on,on:1,cc:11,v:127});
+      }
     }
     ev.sort((a,b)=>a.tick-b.tick||a.on-b.on);
     let d=[].concat([0],meta(3,str(tr.name)));
     if(!tr.isDrum)d=d.concat([0,0xc0|ch,tr.program&127]);
     let last=0;
-    for(const e of ev){d=d.concat(vlq(e.tick-last),[(e.on?0x90:0x80)|ch,e.n,e.v]);last=e.tick;}
+    for(const e of ev){d=d.concat(vlq(e.tick-last),e.cc?[0xb0|ch,e.cc,e.v]:[(e.on?0x90:0x80)|ch,e.n,e.v]);last=e.tick;}
     d=d.concat(vlq(Math.max(0,loopTicks-last)),meta(0x2f,[]));
     tracks.push(d);
   }
