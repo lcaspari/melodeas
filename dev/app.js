@@ -778,8 +778,6 @@ function wireBoard(cv){
     const tr=selTrack();if(quiet()||!tr||INST[tr.inst].kind==='audio')return;
     const q=laneHit(tr,e);if(q){keep(tr);tr.notes=tr.notes.filter(z=>z!==q.src);invalidate();}else addNoteAt(tr,e);
   });
-  const mid=()=>cv.clientWidth/2;
-  $('#zoomIn').onclick=()=>zoomAt(1.6,mid(),cv.clientWidth);$('#zoomOut').onclick=()=>zoomAt(1/1.6,mid(),cv.clientWidth);$('#zoomFit').onclick=()=>setView(1,0);
 }
 
 /* ---------- instrument bar and the panel of the selected track ---------- */
