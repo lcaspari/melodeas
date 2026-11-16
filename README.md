@@ -25,7 +25,12 @@ https://melodeas.net, served over https, so the microphone works in every browse
 3. The take is converted and starts looping. Tap the next instrument and repeat. Recording again into an instrument adds to what is already there; "Clear" empties it and "Undo last change" in the menu steps back.
 4. "Export MIDI" in the menu writes a `.mid` with one track per instrument, tempo and velocities.
 
-All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) between the board and the record bar; the others are grey behind it. Tap the selected instrument again to see everything in colour. An instrument you leave with nothing recorded in it is removed again. On the piano roll every instrument is drawn in the same octave, so a bass two octaves below the keys does not stretch the view; octaves only count inside one instrument, and the C labels show the octave of the selected one.
+All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) between the board and the record bar; the others are grey behind it. Tap the selected instrument again to see everything in colour. An instrument you leave with nothing recorded in it is removed again.
+
+**Zoom and scroll:** pinch the board with two fingers or hold Ctrl and scroll to zoom; drag an empty spot or scroll to move left and right. The −, + and Fit buttons on the board do the same.
+
+**Mixer:** with no instrument selected, the bar above the record button lists the recorded instruments. Tap one to mute it, tap again to bring it back.
+ On the piano roll every instrument is drawn in the same octave, so a bass two octaves below the keys does not stretch the view; octaves only count inside one instrument, and the C labels show the octave of the selected one.
 
 What to perform:
 

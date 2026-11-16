@@ -635,7 +635,9 @@ async function exportMix(){
 
 /* ---------- the board: every track on one grid, the selected one in front ---------- */
 const ROW_LABEL={kick:'kick',snare:'snare',hat:'hat',ohat:'open'},ALL_ROWS=['ohat','hat','snare','kick'],GREY='#8C8C8C';
-const B={cv:null,view:null,dragRange:null};
+const B={cv:null,view:null,dragRange:null,zoom:1,b0:0,gest:0};
+function setView(zoom,b0,LB){LB=LB||loopBeats();B.zoom=clamp(zoom,1,Math.max(1,LB*2));B.b0=clamp(b0,0,LB-LB/B.zoom);}
+function zoomAt(f,x,w){const LB=loopBeats(),b=B.b0+x/w*LB/B.zoom,z=clamp(B.zoom*f,1,Math.max(1,LB*2));setView(z,b-x/w*LB/z,LB);} // keeps the beat under x in place
 function boardLayout(w,H,LB){
   const kind=k=>S.tracks.filter(t=>INST[t.inst].kind===k),drumT=kind('drum'),melT=kind('melodic'),audT=kind('audio');
   const rows=ALL_ROWS.filter(r=>drumT.some(t=>DRUM_ROWS[INST[t.inst].mode].includes(r))),L={w,H,LB};let y=0;
@@ -664,7 +666,8 @@ function drawBoard(pos,LB){
   const c=B.cv;if(!c)return;
   const dpr=window.devicePixelRatio||1,w=c.clientWidth,H=c.clientHeight;if(!w||!H)return;
   if(c.width!==Math.round(w*dpr)||c.height!==Math.round(H*dpr)){c.width=Math.round(w*dpr);c.height=Math.round(H*dpr);}
-  const g=c.getContext('2d'),L=boardLayout(w,H,LB),M=L.mel,D=L.drum,A=L.aud,cur=selTrack();
+  setView(B.zoom,B.b0,LB);
+  const g=c.getContext('2d'),L=boardLayout(w,H,LB),M=L.mel,D=L.drum,A=L.aud,cur=selTrack(),pxb=w*B.zoom/LB,W=w*B.zoom,b0=B.b0,X=b=>(b-b0)*pxb;
   g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,w,H);g.font='10px "Avenir Next",Avenir,"Segoe UI",system-ui,sans-serif';
   if(R.state==='recording'){g.fillStyle='rgba(255,93,93,.14)';g.fillRect(0,0,w,H);}
   if(M){
@@ -675,31 +678,33 @@ function drawBoard(pos,LB){
   }
   if(D){g.fillStyle='rgba(255,255,255,.03)';D.rows.forEach((r,i)=>{if(i%2===0)g.fillRect(0,D.y0+i*D.rh,w,D.rh);});
     g.fillStyle='rgba(168,168,168,.7)';D.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,D.y0+i*D.rh+11));}
-  for(let b=0;b<=LB;b++){const x=Math.round(b/LB*w)+0.5;g.strokeStyle=b%4===0?'rgba(168,168,168,.5)':'rgba(168,168,168,.16)';g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}
+  if(S.grid>0&&S.grid<1&&pxb*S.grid>=9){g.strokeStyle='rgba(168,168,168,.07)';for(let k=Math.ceil(b0/S.grid);k*S.grid<=LB;k++){const x=Math.round(X(k*S.grid))+0.5;if(x>w)break;g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}}
+  for(let b=Math.ceil(b0-1e-9);b<=LB;b++){const x=Math.round(X(b))+0.5;if(x>w+1)break;g.strokeStyle=b%4===0?'rgba(168,168,168,.5)':'rgba(168,168,168,.16)';g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}
+  if(B.zoom>1.01){g.fillStyle='rgba(168,168,168,.7)';for(let b=Math.ceil(b0/4)*4;b<LB;b+=4){const x=X(b);if(x>w)break;g.fillText('bar '+(b/4+1),x+4,11);}}
   g.strokeStyle='rgba(168,168,168,.5)';for(const y of [A&&(M||D)?A.h:0,D&&(M||A)?D.y0:0])if(y){g.beginPath();g.moveTo(0,Math.round(y)+0.5);g.lineTo(w,Math.round(y)+0.5);g.stroke();}
   const order=S.tracks.filter(t=>t!==cur);if(cur)order.push(cur);
   for(const tr of order){
-    const I=INST[tr.inst],front=!cur||tr===cur,dim=front?1:0.38;tr.cv=c;tr.rects=[];g.fillStyle=front?I.color:GREY;
+    const I=INST[tr.inst],off0=!cur&&tr.mute,front=(!cur||tr===cur)&&!off0,dim=front?1:off0?0.22:0.38;tr.cv=c;tr.rects=[];g.fillStyle=front?I.color:GREY;
     const evs=tr.lenBeats>0&&I.kind!=='audio'?playEvents(tr):[],tiles=tr.lenBeats>0?Math.ceil(LB/tr.lenBeats-1e-9):0;
-    if(I.kind==='audio'){tr.geom={w,LB,y0:A.y0,hh:A.y0+A.h};
-      if(tr.peaks)for(let j=0;j<tiles;j++){const x0=j*tr.lenBeats/LB*w,tw=tr.lenBeats/LB*w,n=tr.peaks.length;g.globalAlpha=(j?0.5:0.95)*dim;
+    if(I.kind==='audio'){tr.geom={w:W,LB,b0,y0:A.y0,hh:A.y0+A.h};
+      if(tr.peaks)for(let j=0;j<tiles;j++){const x0=X(j*tr.lenBeats),tw=tr.lenBeats*pxb,n=tr.peaks.length;g.globalAlpha=(j?0.5:0.95)*dim;
         for(let i=0;i<n;i++){const x=x0+i/n*tw;if(x>w)break;const a=Math.max(1,tr.peaks[i]*A.h*0.9);g.fillRect(x,A.y0+(A.h-a)/2,Math.max(1,tw/n-0.5),a);}}
     }else if(I.kind==='drum'){
-      const G=tr.geom={w,LB,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:DRUM_ROWS[I.mode]},bw=Math.max(6,w/LB*0.2),bh=Math.min(G.rh*0.6,34);
+      const G=tr.geom={w:W,LB,b0,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:DRUM_ROWS[I.mode]},bw=clamp(pxb*0.2,6,36),bh=Math.min(G.rh*0.6,34);
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9)continue;
-        const x=b/LB*w,y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
+        const x=X(b),y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n});}
     }else{
-      const off=tr.dOff||0,G=tr.geom={w,LB,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo-off,hi:M.hi-off};
+      const off=tr.dOff||0,G=tr.geom={w:W,LB,b0,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo-off,hi:M.hi-off};
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9||e.n<G.lo||e.n>G.hi)continue;
-        const x=b/LB*w,y=G.hh-(e.n-G.lo+1)*G.rh,bw=Math.max(4,e.d/LB*w-1.5),bh=Math.max(4,G.rh-1);g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
+        const x=X(b),y=G.hh-(e.n-G.lo+1)*G.rh,bw=Math.max(4,e.d*pxb-1.5),bh=Math.max(4,G.rh-1);g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,bw,bh);tr.rects.push({x:x-3,y:y-4,w:bw+6,h:bh+8,src:e.src,n:e.n,mel:true});}
     }
   }
   g.globalAlpha=1;
   if(D){g.fillStyle='rgba(235,235,235,.75)';D.rows.forEach((r,i)=>g.fillText(ROW_LABEL[r],4,D.y0+i*D.rh+11));}
   if(drag&&drag.moved){for(const q of drag.tr.rects)if(q.src===drag.n){g.strokeStyle='#fff';g.lineWidth=1.5;g.strokeRect(q.x+2,q.y+3,q.w-4,q.h-6);g.lineWidth=1;}}
-  if(pos>=0){const x=pos/LB*w;g.fillStyle='#FFB43A';g.fillRect(x-1,0,2,H);}
+  if(pos>=0){const x=X(pos);g.fillStyle='#FFB43A';g.fillRect(x-1,0,2,H);}
 }
 
 /* ---------- editing notes of the selected track ---------- */
@@ -715,23 +720,33 @@ function selectTrack(tr){ // null, or the track that is already selected, goes b
 function addNoteAt(tr,e){
   const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G||y<G.y0||y>G.hh)return;
   keep(tr);if(!tr.lenBeats)tr.lenBeats=G.LB;
-  let b=x/G.w*G.LB;if(S.grid>0)b=Math.floor(b/S.grid+1e-6)*S.grid;
+  let b=G.b0+x/G.w*G.LB;if(S.grid>0)b=Math.floor(b/S.grid+1e-6)*S.grid;
   const n=I.kind==='drum'?{t:b%tr.lenBeats,drum:drumAt(G,y),v:100}
     :{t:b%tr.lenBeats,d:S.grid>0?Math.max(S.grid,0.5):0.5,p:clamp(G.lo+Math.floor((G.hh-y)/G.rh),0,127)-12*tr.octave,v:100};
   tr.notes.push(n);tr.notes.sort((a,b2)=>a.t-b2.t);invalidate();audition(tr,n);
 }
 function wireBoard(cv){
-  B.cv=cv;
+  B.cv=cv;cv.style.touchAction='none';
+  const pts=new Map();let pan=null,pinch=null;
+  const endDrag=()=>{if(!drag)return;const d=drag,tr=d.tr;drag=null;B.dragRange=null;
+    if(d.moved){tr.dragged=performance.now();if(d.n.drum&&d.n.drum!==d.drum0)learn(tr,d.n);invalidate();audition(tr,d.n);}};
   cv.addEventListener('pointerdown',e=>{
-    const tr=selTrack();
-    if(!tr){for(let i=S.tracks.length-1;i>=0;i--)if(S.tracks[i].rects&&laneHit(S.tracks[i],e)){selectTrack(S.tracks[i]);break;}return;} // in the view of everything, a tap on a note picks its track
-    const I=INST[tr.inst];if(I.kind==='audio')return;
-    const q=laneHit(tr,e);if(!q)return;
-    try{cv.setPointerCapture(e.pointerId);}catch(err){}
-    drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
-    if(I.kind==='melodic')B.dragRange={lo:tr.geom.lo+(tr.dOff||0),hi:tr.geom.hi+(tr.dOff||0)};
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});try{cv.setPointerCapture(e.pointerId);}catch(err){}
+    if(pts.size===2){ // two fingers: pinch to zoom, slide to scroll
+      endDrag();pan=null;const [a,b]=[...pts.values()],r=cv.getBoundingClientRect(),mx=(a.x+b.x)/2-r.left;
+      pinch={d0:Math.max(20,Math.abs(a.x-b.x)),z0:B.zoom,beat:B.b0+mx/r.width*loopBeats()/B.zoom};return;}
+    if(pts.size>2)return;
+    const tr=selTrack(),q=tr&&INST[tr.inst].kind!=='audio'?laneHit(tr,e):null;
+    if(q){drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
+      if(INST[tr.inst].kind==='melodic')B.dragRange={lo:tr.geom.lo+(tr.dOff||0),hi:tr.geom.hi+(tr.dOff||0)};}
+    else pan={x0:e.clientX,b0:B.b0,moved:false}; // dragging the empty board scrolls it
   });
   cv.addEventListener('pointermove',e=>{
+    if(pts.has(e.pointerId))pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(pinch&&pts.size>=2){const [a,b]=[...pts.values()],r=cv.getBoundingClientRect(),mx=(a.x+b.x)/2-r.left,LB=loopBeats();
+      const z=clamp(pinch.z0*Math.max(20,Math.abs(a.x-b.x))/pinch.d0,1,Math.max(1,LB*2));setView(z,pinch.beat-mx/r.width*LB/z,LB);B.gest=performance.now();return;}
+    if(pan){const dx=e.clientX-pan.x0;if(!pan.moved&&Math.abs(dx)<5)return;pan.moved=true;B.gest=performance.now();
+      setView(B.zoom,pan.b0-dx/cv.clientWidth*loopBeats()/B.zoom);cv.style.cursor='grabbing';return;}
     const tr=drag?drag.tr:selTrack();
     if(!drag){if(tr&&INST[tr.inst].kind!=='audio'){const q=laneHit(tr,e);cv.style.cursor=q?(q.edge?'ew-resize':'grab'):'crosshair';}else cv.style.cursor='pointer';return;}
     const I=INST[tr.inst],dx=e.clientX-drag.x0,dy=e.clientY-drag.y0;
@@ -745,19 +760,26 @@ function wireBoard(cv){
     }
     softInvalidate(tr);
   });
-  const up=()=>{
-    if(!drag)return;const d=drag,tr=d.tr;drag=null;B.dragRange=null;
-    if(d.moved){tr.dragged=performance.now();if(d.n.drum&&d.n.drum!==d.drum0)learn(tr,d.n);invalidate();audition(tr,d.n);}
-  };
+  const up=e=>{pts.delete(e.pointerId);if(pts.size<2)pinch=null;if(!pts.size){pan=null;endDrag();}};
   cv.addEventListener('pointerup',up);cv.addEventListener('pointercancel',up);
+  cv.addEventListener('wheel',e=>{ // pinch or ctrl + wheel zooms, any other wheel or swipe scrolls sideways
+    e.preventDefault();const r=cv.getBoundingClientRect();
+    if(e.ctrlKey||e.metaKey)zoomAt(Math.exp(-e.deltaY*0.01),e.clientX-r.left,r.width);
+    else{const d=Math.abs(e.deltaX)>Math.abs(e.deltaY)?e.deltaX:e.deltaY;setView(B.zoom,B.b0+d/r.width*loopBeats()/B.zoom);}
+  },{passive:false});
+  const quiet=()=>performance.now()-B.gest<350;
   cv.addEventListener('click',e=>{
-    const tr=selTrack();if(!tr||performance.now()-tr.dragged<350)return;const I=INST[tr.inst];
+    if(quiet())return;const tr=selTrack();
+    if(!tr){for(let i=S.tracks.length-1;i>=0;i--)if(S.tracks[i].rects&&laneHit(S.tracks[i],e)){selectTrack(S.tracks[i]);break;}return;} // in the overview, a tap on a note picks its instrument
+    if(performance.now()-tr.dragged<350)return;const I=INST[tr.inst];
     const q=laneHit(tr,e);if(q&&q.src.drum){keep(tr);const n=q.src;n.drum=DRUM_NEXT[I.mode][n.drum]||n.drum;learn(tr,n);invalidate();audition(tr,n);}
   });
   cv.addEventListener('dblclick',e=>{
-    const tr=selTrack();if(!tr||INST[tr.inst].kind==='audio')return;
+    const tr=selTrack();if(quiet()||!tr||INST[tr.inst].kind==='audio')return;
     const q=laneHit(tr,e);if(q){keep(tr);tr.notes=tr.notes.filter(z=>z!==q.src);invalidate();}else addNoteAt(tr,e);
   });
+  const mid=()=>cv.clientWidth/2;
+  $('#zoomIn').onclick=()=>zoomAt(1.6,mid(),cv.clientWidth);$('#zoomOut').onclick=()=>zoomAt(1/1.6,mid(),cv.clientWidth);$('#zoomFit').onclick=()=>setView(1,0);
 }
 
 /* ---------- instrument bar and the panel of the selected track ---------- */
@@ -788,8 +810,14 @@ function renderTracks(){
   }
   const on=bar.querySelector('.on');if(on&&on.scrollIntoView)try{on.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
   $('#empty').classList.toggle('hide',S.tracks.length>0);$('#boardBox').classList.toggle('hide',!S.tracks.length);
-  if(B.cv)B.cv.style.touchAction=cur&&INST[cur.inst].kind!=='audio'?'none':'pan-y';
-  const box=$('#panel');box.textContent='';box.classList.toggle('hide',!cur);
+  const box=$('#panel');box.textContent='';box.classList.toggle('hide',!S.tracks.length);box.classList.toggle('mix',!cur);
+  if(!cur&&S.tracks.length){ // nothing selected: a small mixer, tap an instrument to mute it
+    const row=h('div',{className:'row'},h('span',{className:'mixl'},'Tap to mute'));
+    for(const tr of S.tracks){const I=INST[tr.inst];
+      row.append(h('button',{className:'mixb',style:'--c:'+I.color,textContent:I.name,'aria-pressed':String(!tr.mute),title:tr.mute?'Muted. Tap to hear it again':'Playing. Tap to mute',
+        onclick:e=>{tr.mute=!tr.mute;e.target.setAttribute('aria-pressed',String(!tr.mute));save();}}));}
+    box.append(row);
+  }
   if(cur){
     const tr=cur,I=INST[tr.inst];box.style.setProperty('--c',I.color);
     box.append(h('div',{className:'row'},h('div',{className:'tn'},I.name,h('small',{},'Next take goes here')),

@@ -99,6 +99,13 @@ meter{width:120px;height:12px}
 /* board and the panel of the selected instrument */
 .board{position:absolute;inset:0;background:var(--lane)}
 canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;touch-action:pan-y}
+.zoom{position:absolute;top:8px;right:8px;display:flex;gap:4px}
+.zoom button{height:30px;min-width:30px;padding:0 8px;border-radius:8px;border:1px solid var(--line);background:rgba(58,58,58,.85);color:var(--text);font-size:14px;font-weight:600}
+.zoom button:hover{border-color:var(--soft)}
+.panel.mix{border-top-color:var(--line)}
+.mixl{font-size:12.5px;color:var(--soft);margin-right:4px}
+.mixb{height:32px;border-radius:16px;border:2px solid var(--c);background:var(--c);color:#1C1C1C;font-size:13px;font-weight:700;padding:0 12px}
+.mixb[aria-pressed=false]{background:none;color:var(--soft);text-decoration:line-through;border-color:var(--line)}
 .panel{border-top:3px solid var(--c);border-bottom:1px solid var(--line);padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:7px;max-height:42vh;max-height:42dvh;overflow-y:auto}
 .th .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tn{font-weight:700;font-size:15px;margin-right:6px}
@@ -195,7 +202,8 @@ dialog .icon{margin-right:-10px}
 
 <main>
   <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>Pick an instrument at the top, press the red button, and perform one round of the loop.</p>
-  <div class="board hide" id="boardBox"><canvas id="board" class="lane"></canvas></div>
+  <div class="board hide" id="boardBox"><canvas id="board" class="lane"></canvas>
+    <div class="zoom"><button id="zoomOut" aria-label="Zoom out">−</button><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit" aria-label="Show the whole loop">Fit</button></div></div>
 </main>
 
 <div class="dock">
@@ -235,6 +243,7 @@ dialog .icon{margin-right:-10px}
       <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
     </div>
     <p class="keys">Editing: select an instrument, then drag a note to move it, drag its right edge to change its length, double-tap it to remove it, double-tap an empty spot to add one. Tap a drum hit to switch drum.</p>
+    <p class="keys">Zoom: pinch the board with two fingers, or hold Ctrl and scroll. Drag an empty spot or scroll to move left and right.</p>
     <p class="keys">On a computer: Space plays and stops, R records.</p>
   </div>
 </dialog>
