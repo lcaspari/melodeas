@@ -65,7 +65,7 @@ In the selected instrument: drag a note to move it in time and pitch (or between
 
 ## Choices made in this version
 
-- **Tempo:** the default is a metronome with a count-in, because it is the most reliable. "First take: Set the tempo" is the loop-pedal way: no click, press the button again on the first beat of the next round, and the tempo and bar count are worked out from the take.
+- **Tempo:** the default is a metronome with a count-in, because it is the most reliable. "First take: Set the tempo" is the loop-pedal way: no click, press the button again on the first beat of the next round, and the tempo and bar count are worked out from the take. The click is on while there are no drums; as soon as a drum take exists it switches off (the drums keep time), and it comes back on if all drums are removed. Settings → Metronome overrides this until the drums change again. The count-in always clicks.
 - **Speakers:** in "Speakers" mode the loop is turned down while recording and the browser's echo cancelling is switched on. "Headphones" turns both off and gives the cleanest detection.
 - **Timing offset:** sound takes time to leave the speakers and return through the mic. The page estimates this; "Measure with speakers" in Settings measures it properly.
 - **Background noise:** before detection the take is filtered below 90 Hz (drums) or 55 Hz (melodies), the steady background is estimated per frequency from the quietest fifth of the take and subtracted, and a hit must stand clearly above it. In a noisy place, sounds centred below 200 Hz (road bumps, engine rumble) are ignored. Melodies use the quiet count-in before the take to set their loudness gate. On synthetic car noise this took noise-only takes from about 30 false kicks to none.

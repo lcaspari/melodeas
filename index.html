@@ -1258,7 +1258,7 @@ async function finishRec(){
         else{let d=e.d/sp;if(t<0){d+=t;t=0;}if(d>0.05)notes.push(e.env?{t,d,p:e.p,v:e.v,env:e.env}:{t,d,p:e.p,v:e.v});}
       }
       if(!notes.length)setStatus(NOTHING,6000);
-      else{commitTake(tr,{notes,lenBeats:len});setStatus('Got '+notes.length+(I.kind==='drum'?(notes.length===1?' hit.':' hits.'):(notes.length===1?' note.':' notes.'))+(had?' Added to the '+had+' already on this track.':' Record again to add more, or add another track.'),5000);}
+      else{commitTake(tr,{notes,lenBeats:len});setStatus('Got '+notes.length+(I.kind==='drum'?(notes.length===1?' hit.':' hits.'):(notes.length===1?' note.':' notes.'))+(had?' Added to the '+had+' already on this track.':' Record again to add more, or add another track.')+clickNote,6000);clickNote='';}
     }
   }catch(err){setStatus('Something went wrong while listening back: '+err.message,8000);}
   endRec();
@@ -1518,8 +1518,18 @@ function wireChip(b,tr){ // tap: select, or mute the selected one; hold (or righ
     if(selTrack()===tr){tr.mute=!tr.mute;save();renderTracks();setStatus(tr.mute?chipLabel(tr)+' muted. Tap it again to hear it.':chipLabel(tr)+' back on.',2500);}
     else selectTrack(tr);};
 }
+let clickNote='',drumsSeen=null; // the click follows the drums: on while there are none, off once a drum take keeps time
+function autoClick(){
+  const has=S.tracks.some(t=>INST[t.inst].kind==='drum'&&hasContent(t));
+  if(has===drumsSeen)return;
+  const first=drumsSeen===null;drumsSeen=has;
+  if(S.click===!has)return;
+  S.click=!has;const b=$('#click');if(b)b.setAttribute('aria-pressed',S.click);save();
+  if(!first){clickNote=has?' Click off: the drums keep time now.':' Click back on: there are no drums any more.';setTimeout(()=>{if(clickNote){setStatus(clickNote.trim(),4000);clickNote='';}},0);}
+}
 function openPicker(){if(R.state!=='idle')return;$('#picker').showModal();}
 function renderTracks(){
+  autoClick();
   const bar=$('#chips'),cur=selTrack(),anySolo=S.tracks.some(t=>t.solo);bar.textContent='';
   if(S.tracks.length)bar.append(h('button',{className:'chip all','aria-pressed':String(!cur),title:'Show all instruments',textContent:'All',onclick:()=>selectTrack(null)}));
   for(const tr of S.tracks){const k=chipOf(tr),on=tr===cur;
