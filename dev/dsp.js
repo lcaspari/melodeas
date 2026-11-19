@@ -18,7 +18,9 @@ function makeFFT(n){
   };
 }
 
-/* ---------- Spectral frames: flux (for onsets), level, brightness ---------- */
+/* ---------- Spectral frames: flux (for onsets), level, brightness ----------
+   Background noise (car, street, fan) is estimated per frequency from the quietest fifth of the take and
+   subtracted before anything is measured, so only sounds that stand out from it count. */
 function spectral(x,sr){
   const N=sr>=32000?1024:512,H=N>>2,bins=N>>1;
   const nF=x.length>=N?Math.floor((x.length-N)/H)+1:0;
@@ -26,29 +28,42 @@ function spectral(x,sr){
   const g=1/peak,fft=makeFFT(N),win=new Float32Array(N);
   for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
   const re=new Float32Array(N),im=new Float32Array(N);
-  const flux=new Float32Array(nF),rms=new Float32Array(nF),cen=new Float32Array(nF),den=new Float32Array(nF);
+  const flux=new Float32Array(nF),rms=new Float32Array(nF),cen=new Float32Array(nF),den=new Float32Array(nF),cl=new Float32Array(nF),snr=new Float32Array(nF);
   const lf=new Float32Array(bins);for(let k=1;k<bins;k++)lf[k]=Math.log2(k*sr/N);
   // Flux is summed over log-spaced bands so a dull thump counts as much as a bright hiss
-  const NB=24,kLo=Math.max(1,Math.round(80*N/sr)),kHi=Math.min(bins-1,Math.round(11000*N/sr));
+  const NB=24,kLo=Math.max(1,Math.round(100*N/sr)),kHi=Math.min(bins-1,Math.round(11000*N/sr)),nb=kHi-kLo+1;
   const band=new Uint8Array(bins),lr=Math.log(kHi/kLo);
   for(let k=kLo;k<=kHi;k++)band[k]=Math.min(NB-1,Math.floor(NB*Math.log(k/kLo)/lr));
-  const ring=[new Float32Array(NB),new Float32Array(NB),new Float32Array(NB)],acc=new Float32Array(NB);
+  const P=new Float32Array(nF*nb);
   for(let f=0;f<nF;f++){
     const o=f*H;let e=0;
     for(let i=0;i<N;i++){const v=x[o+i];e+=v*v;re[i]=v*g*win[i];im[i]=0;}
     rms[f]=Math.sqrt(e/N);fft(re,im);
-    const cur=ring[f%3],old=ring[(f+1)%3];let fl=0,num=0,dn=0;acc.fill(0);
-    for(let k=kLo;k<=kHi;k++){const p=re[k]*re[k]+im[k]*im[k];acc[band[k]]+=Math.sqrt(p);num+=lf[k]*p;dn+=p;}
+    for(let k=kLo;k<=kHi;k++)P[f*nb+k-kLo]=re[k]*re[k]+im[k]*im[k];
+  }
+  // noise floor per frequency: the 20th percentile over time (hits are short, so this is the background)
+  const nz=new Float32Array(nb);let nSum=0;
+  if(nF>=10){const col=new Float32Array(nF),q=Math.floor(nF*0.2);
+    for(let k=0;k<nb;k++){for(let f=0;f<nF;f++)col[f]=P[f*nb+k];col.sort();nz[k]=col[q]*4.48;nSum+=nz[k];}} // for noise, the 20th percentile of power is 0.223 x its mean
+  const ring=[new Float32Array(NB),new Float32Array(NB),new Float32Array(NB)],acc=new Float32Array(NB);
+  for(let f=0;f<nF;f++){
+    const cur=ring[f%3],old=ring[(f+1)%3];let fl=0,num=0,dn=0,raw=0;acc.fill(0);
+    for(let k=kLo;k<=kHi;k++){const p=P[f*nb+k-kLo];raw+=p;let c=p-1.5*nz[k-kLo];if(c<0)c=0; // a little over-subtraction
+      acc[band[k]]+=Math.sqrt(c);num+=lf[k]*c;dn+=c;}
     for(let b=0;b<NB;b++){const lm=Math.log(1+acc[b]);if(f>=2){const d=lm-old[b];if(d>0)fl+=d;}cur[b]=lm;}
     flux[f]=fl;den[f]=dn;cen[f]=dn>0?num/dn:0;
+    cl[f]=raw>0?rms[f]*Math.sqrt(dn/raw):0;          // level of what stands out above the noise
+    snr[f]=nSum>0?dn/nSum:1e6;
   }
-  return {N,H,nF,flux,rms,cen,den,peak};
+  let dmax=0;for(let f=0;f<nF;f++)if(den[f]>dmax)dmax=den[f];
+  return {N,H,nF,flux,rms,cl,snr,cen,den,peak,noisy:dmax>0&&nSum/dmax>3e-4}; // background within ~35 dB of the loudest moment
 }
 
 /* ---------- Percussive hits: time, loudness, brightness, ring length ---------- */
 function detectHits(x,sr,sens){
   sens=sens||1;
-  const sp=spectral(x,sr),{flux,rms,cen,den,N,H,nF}=sp;
+  x=highpass(highpass(x,sr,90),sr,90); // steep low cut: road bumps and engine rumble sit below the lowest beatboxed kick
+  const sp=spectral(x,sr),{flux,cl:rms,snr,cen,den,N,H,nF,noisy}=sp; // levels are measured after the background is removed
   let fmax=0;for(let i=0;i<nF;i++)if(flux[i]>fmax)fmax=flux[i];
   if(fmax<=0)return [];
   const thr=0.12*fmax/sens,m=Math.max(2,Math.round(0.03*sr/H)),w=Math.round(0.12*sr/H);
@@ -60,10 +75,13 @@ function detectHits(x,sr,sens){
     if(!isMax)continue;
     let s=0,k=0;for(let j=Math.max(0,n-w);j<n-2;j++){s+=flux[j];k++;}
     if(k&&v<1.5*s/k)continue;
-    let level=0,lf=n;for(let j=n;j<Math.min(nF,n+7);j++)if(rms[j]>level){level=rms[j];lf=j;}
+    let level=0,lf=n,sn=0;for(let j=n;j<Math.min(nF,n+7);j++){if(rms[j]>level){level=rms[j];lf=j;}if(snr[j]>sn)sn=snr[j];}
+    if(sn<1/sens)continue; // must stand clearly above the background noise
     let cs=0,ds=0;for(let j=n;j<Math.min(nF,n+4);j++){cs+=cen[j]*den[j];ds+=den[j];}
     let q=lf;while(q<nF&&rms[q]>=0.3*level)q++;
-    c.push({t:(n*H+N*0.5)/sr-0.003,flux:v,level,f:ds>0?Math.round(cs/ds*100)/100:9,dur:(q-n)*H/sr});
+    const fc=ds>0?Math.round(cs/ds*100)/100:9;
+    if(noisy&&fc<7.64)continue; // in a noisy place, nothing a mouth or hand makes is centred below 200 Hz: that is rumble or a bump
+    c.push({t:(n*H+N*0.5)/sr-0.003,flux:v,level,f:fc,dur:(q-n)*H/sr});
   }
   let lmax=0;for(const h of c)if(h.level>lmax)lmax=h.level;
   const gate=Math.max(0.003,0.06*lmax)/sens;
@@ -142,15 +160,24 @@ function decim2(x){
   for(let i=0;i<n;i++){const a=x[2*i-1]||0,b=x[2*i],c=x[2*i+1]||0;y[i]=0.25*a+0.5*b+0.25*c;}
   return y;
 }
-function pitchTrack(x,sr,sens){
+function highpass(x,sr,fc){ // 2nd-order Butterworth: takes out engine and road rumble below the voice
+  const w=2*Math.PI*fc/sr,c=Math.cos(w),al=Math.sin(w)/Math.SQRT2,a0=1+al,b0=(1+c)/2/a0,b1=-(1+c)/a0,a1=-2*c/a0,a2=(1-al)/a0;
+  const y=new Float32Array(x.length);let x1=0,x2=0,y1=0,y2=0;
+  for(let i=0;i<x.length;i++){const v=x[i],o=b0*v+b1*x1+b0*x2-a1*y1-a2*y2;x2=x1;x1=v;y2=y1;y1=o;y[i]=o;}return y;}
+function frameRms(y,W,hop){const n=y.length>=W?Math.floor((y.length-W)/hop)+1:0,r=new Float32Array(n);
+  for(let f=0;f<n;f++){let e=0;const s=f*hop;for(let j=0;j<W;j++)e+=y[s+j]*y[s+j];r[f]=Math.sqrt(e/W);}return r;}
+function pitchTrack(x,sr,sens,noise){
   sens=sens||1;
-  let y=x,fs=sr;while(fs>30000){y=decim2(y);fs/=2;}
+  let y=highpass(x,sr,55),fs=sr;while(fs>30000){y=decim2(y);fs/=2;}
   const W=fs>=20000?1024:512,hop=W>>2,tauMin=Math.floor(fs/1000),tauMax=Math.ceil(fs/65);
   const nF=y.length>=W+tauMax?Math.floor((y.length-W-tauMax)/hop)+1:0;
   const pitch=new Float32Array(nF).fill(NaN),rms=new Float32Array(nF);
   for(let f=0;f<nF;f++){let e=0;const s=f*hop;for(let j=0;j<W;j++)e+=y[s+j]*y[s+j];rms[f]=Math.sqrt(e/W);}
   const sorted=Array.from(rms).sort((a,b)=>a-b),r95=sorted[Math.floor(sorted.length*0.95)]||0;
-  const gate=Math.max(0.004,0.07*r95)/sens,d=new Float32Array(tauMax+2);
+  // background level: from the quiet count-in before the take when there is one, else the quietest 5% of the take
+  let bg=sorted[Math.floor(sorted.length*0.05)]||0;
+  if(noise&&noise.length>sr*0.2){let z=highpass(noise,sr,55);for(let q=fs;q<sr;q*=2)z=decim2(z);const nr=Array.from(frameRms(z,W,hop)).sort((a,b)=>a-b);if(nr.length)bg=nr[nr.length>>1];}
+  const gate=Math.max(0.004,0.07*r95,2.5*bg)/sens,d=new Float32Array(tauMax+2);
   for(let f=0;f<nF;f++){
     if(rms[f]<gate)continue;
     const s=f*hop;
@@ -221,8 +248,8 @@ function segmentNotes(pt){
   return out.map(n=>({t:(n.start*hop+W*0.5)/fs-0.001,d:(n.end-n.start)*hop/fs,p:n.p,level:n.level}));
 }
 
-function detectNotes(x,sr,sens){
-  const notes=segmentNotes(pitchTrack(x,sr,sens));
+function detectNotes(x,sr,sens,noise){
+  const notes=segmentNotes(pitchTrack(x,sr,sens,noise));
   if(!notes.length)return notes;
   let lmax=0,sx=0,sy=0,sw=0;
   for(const n of notes){if(n.level>lmax)lmax=n.level;
@@ -249,7 +276,7 @@ function firstSound(x,sr){
 
 /* One entry point, used from the worker */
 function analyse(m){
-  if(m.mode==='melodic')return {events:detectNotes(m.x,m.sr,m.sens)};
+  if(m.mode==='melodic')return {events:detectNotes(m.x,m.sr,m.sens,m.noise)};
   if(m.mode==='audio'){const t=firstSound(m.x,m.sr);return {events:t<0?[]:[{t}]};}
   const hits=labelDrums(detectHits(m.x,m.sr,m.sens),m.mode,m.known);
   return {events:hits.map(h=>({t:h.t,d:h.dur,drum:h.drum,v:h.v,f:h.f}))};

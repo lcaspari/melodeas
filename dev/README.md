@@ -13,6 +13,7 @@
 ```
 node build.js          # rebuild ../index.html
 node test.js           # detection and MIDI tests on synthetic audio
+node carnoise.js       # detection with synthetic car noise in the background
 python3 e2e.py         # full run in headless Chrome (needs playwright and mido; set CHROME to your Chrome binary)
 python3 audit.py       # renders every instrument and prints its level
 ```

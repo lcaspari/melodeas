@@ -15,7 +15,7 @@ const mel=(name,group,color,program,eq,rev,dly,extra)=>Object.assign({name,kind:
 const INST={
   kicksnare:{name:'Kick + snare',kind:'drum',mode:'kicksnare',color:'#FFB648',eq:[30,16000],rev:0,hint:'Beatbox it: “p” or “b” for kick, “k” for snare.'},
   hat:{name:'Hi-hat',kind:'drum',mode:'hat',color:'#6FE3CB',eq:[450,20000],rev:0,hint:'Go “ts ts ts”. Hold a long “tsss” for an open hat.'},
-  kit:{name:'Drums',chip:'Drums',kind:'drum',mode:'kit',color:'#FFB648',eq:[30,20000],rev:0,hint:'Beatbox it: “p” or “b” for kick, “k” for snare, “ts” for hat, a long “tsss” for an open hat. It sorts them out by itself.'},
+  kit:{name:'Drums',chip:'Drums',kind:'drum',mode:'kit',color:'#FFB648',eq:[30,20000],rev:0,hint:'Beatbox, clap or snap. Deep sounds become kick, middle ones snare, bright ones hat, a long “tsss” an open hat. Change what a row plays under Sounds.'},
   bass:mel('Synth bass','Bass','#6EA8FF',38,[35,5000],0,0,{chip:'Bass'}),
   sub:mel('Sub bass','Bass','#6EA8FF',39,[25,1500],0),
   bass808:mel('808 bass','Bass','#6EA8FF',38,[25,4000],0),
@@ -39,8 +39,10 @@ const INST={
 for(const k of ['sub','bass','reese','synth1','sqlead','organ','pad','strings','brass','trumpet'])INST[k].env=true; // long notes follow the loudness curve of the voice
 const CHIPS=['kit','toms','bass','synth1','synth2','epiano','pad','brass','voice'];
 const KIT_NAMES={punch:'Punchy kit','808':'808 kit',boom:'Boom bap kit',trap:'Trap kit'};
-const DRUM_NOTE={kick:36,snare:38,hat:42,ohat:46};
-const DRUM_ROWS={kit:['ohat','hat','snare','kick'],hat:['ohat','hat'],kicksnare:['snare','kick']};
+const DRUM_NOTE={kick:36,snare:38,clap:39,snap:37,hat:42,ohat:46,crash:49};
+const DRUM_NAME={kick:'Kick',snare:'Snare',clap:'Clap',snap:'Snap',hat:'Hi-hat',ohat:'Open hat',crash:'Crash'};
+const CLASS_OF={kick:'kick',snare:'snare',clap:'snare',snap:'snare',hat:'hat',ohat:'ohat',crash:'ohat'}; // which of the detector's sound classes a drum belongs to
+const DRUM_ROWS={kit:['crash','ohat','hat','snap','clap','snare','kick'],hat:['ohat','hat'],kicksnare:['snare','kick']};
 const DRUM_NEXT={kicksnare:{kick:'snare',snare:'kick'},kit:{kick:'snare',snare:'hat',hat:'kick'},hat:{hat:'ohat',ohat:'hat'}};
 const NOTE_NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
 
@@ -66,7 +68,7 @@ function idleStatus(){
 /* ---------- persistence ---------- */
 function snapshot(withAudio){
   return {v:2,bpm:S.bpm,bars:S.bars,grid:S.grid,scale:S.scale,keyRoot:S.keyRoot,click:S.click,listen:S.listen,firstTake:S.firstTake,latencyMs:S.latencyMs,sens:S.sens,duck:S.duck,learned:S.learned,
-    tracks:S.tracks.map(t=>({inst:t.inst,kit:t.kit,vol:t.vol,mute:t.mute,dyn:t.dyn,octave:t.octave,eq:t.eq,rev:t.rev,lenBeats:t.lenBeats,notes:t.notes,
+    tracks:S.tracks.map(t=>({inst:t.inst,kit:t.kit,map:t.map||null,akey:t.akey||null,vol:t.vol,mute:t.mute,dyn:t.dyn,octave:t.octave,eq:t.eq,rev:t.rev,lenBeats:t.lenBeats,notes:t.notes,
       audio:withAudio&&t.audio?{sr:t.audio.sr,bpm:t.audio.bpm,b64:pcmToB64(t.audio.data)}:null}))};
 }
 function restore(o){
@@ -77,16 +79,34 @@ function restore(o){
     if(t.inst==='kicksnare'||t.inst==='hat')t.inst='kit'; // older projects: all drums are one instrument now
     if(!INST[t.inst])continue;
     const tr=newTrack(t.inst);Object.assign(tr,{vol:t.vol??0.8,mute:!!t.mute,dyn:t.dyn!==false,octave:t.octave||0,lenBeats:t.lenBeats||0,notes:t.notes||[]});
-    if(t.kit&&KIT_NAMES[t.kit])tr.kit=t.kit;if(t.eq&&t.eq.hp!=null)tr.eq={hp:+t.eq.hp,lp:+t.eq.lp};if(t.rev!=null)tr.rev=+t.rev;
+    if(t.kit&&KIT_NAMES[t.kit])tr.kit=t.kit;if(t.map)tr.map=t.map;if(t.akey)tr.akey=t.akey;if(t.eq&&t.eq.hp!=null)tr.eq={hp:+t.eq.hp,lp:+t.eq.lp};if(t.rev!=null)tr.rev=+t.rev;
     if(t.audio&&t.audio.b64)tr.audio={sr:t.audio.sr,bpm:t.audio.bpm,data:b64ToPcm(t.audio.b64)};
-    else if(INST[t.inst].kind==='audio')tr.lenBeats=0;
+    else if(INST[t.inst].kind==='audio'){tr.savedLen=tr.lenBeats;tr.lenBeats=0;}
     if(tr.audio)tr.peaks=makePeaks(tr.audio.data);
     S.tracks.push(tr);
   }
   S.sel=null;
 }
 let saveTimer=0;
-function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{try{localStorage.setItem('melodeas.v1',JSON.stringify(snapshot(false)));}catch(e){}},300);}
+/* voice recordings are too big for localStorage: they live in IndexedDB, one entry per track */
+const AUDIO_DB=(()=>{let p=null;
+  const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('melodeas',1);r.onupgradeneeded=()=>r.result.createObjectStore('audio');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));
+  const run=(mode,fn)=>open().then(db=>new Promise((res,rej)=>{const t=db.transaction('audio',mode),q=fn(t.objectStore('audio'));t.oncomplete=()=>res(q&&q.result);t.onerror=t.onabort=()=>rej(t.error);}));
+  return {get:k=>run('readonly',s=>s.get(k)),put:(k,v)=>run('readwrite',s=>s.put(v,k)),keys:()=>run('readonly',s=>s.getAllKeys()),del:k=>run('readwrite',s=>s.delete(k))};})();
+async function saveAudio(){
+  try{
+    for(const t of S.tracks)if(t.audio&&t.akeyFor!==t.audio){t.akey=t.akey||('a'+Date.now().toString(36)+Math.random().toString(36).slice(2,7));t.akeyFor=t.audio;
+      await AUDIO_DB.put(t.akey,{sr:t.audio.sr,bpm:t.audio.bpm,data:t.audio.data});}
+    const used=new Set(S.tracks.filter(t=>t.audio).map(t=>t.akey));
+    for(const k of await AUDIO_DB.keys())if(!used.has(k))await AUDIO_DB.del(k);
+  }catch(e){}
+}
+async function loadAudio(){ // after restore(): bring back the voice recordings of the saved project
+  for(const t of S.tracks)if(t.akey&&!t.audio&&INST[t.inst].kind==='audio')try{const a=await AUDIO_DB.get(t.akey);
+    if(a&&a.data){t.audio={sr:a.sr,bpm:a.bpm,data:a.data};t.akeyFor=t.audio;t.peaks=makePeaks(a.data);t.lenBeats=t.savedLen||0;}}catch(e){}
+}
+function save(){clearTimeout(saveTimer);saveTimer=setTimeout(()=>{for(const t of S.tracks)if(t.audio&&!t.akey)t.akey='a'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  try{localStorage.setItem('melodeas.v1',JSON.stringify(snapshot(false)));}catch(e){}saveAudio();},300);}
 function pcmToB64(f){const b=new Uint8Array(f.length*2),v=new DataView(b.buffer);for(let i=0;i<f.length;i++)v.setInt16(i*2,Math.round(clamp(f[i],-1,1)*32767),true);
   let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s);}
 function b64ToPcm(s){const bin=atob(s),v=new DataView(new ArrayBuffer(bin.length));for(let i=0;i<bin.length;i++)v.setUint8(i,bin.charCodeAt(i));
@@ -123,7 +143,7 @@ function commitTake(tr,c){
 function makePeaks(d){const n=400,p=new Float32Array(n),step=d.length/n;for(let i=0;i<n;i++){let m=0;for(let j=Math.floor(i*step);j<Math.floor((i+1)*step);j++){const a=Math.abs(d[j]);if(a>m)m=a;}p[i]=m;}return p;}
 function learn(tr,n){ // a corrected drum hit becomes a reference for the next takes
   if(n.f==null||INST[tr.inst].mode==='hat')return;
-  S.learned.push({f:n.f,drum:n.drum});if(S.learned.length>60)S.learned.shift();
+  n.c=CLASS_OF[n.drum]||n.drum;S.learned.push({f:n.f,drum:n.c});if(S.learned.length>60)S.learned.shift();
 }
 
 function currentRoot(){
@@ -140,7 +160,7 @@ function playEvents(tr){
   const I=INST[tr.inst],len=tr.lenBeats,root=currentRoot();let out=[];
   for(const n of tr.notes){
     let b=DSP.quantize(n.t,S.grid);if(b>=len-1e-6)b-=len;if(b<0)b=0;
-    if(I.kind==='drum')out.push({b,d:n.drum==='ohat'?(n.d||0.5):0.25,drum:n.drum,n:DRUM_NOTE[n.drum],v:n.v,src:n});
+    if(I.kind==='drum')out.push({b,d:n.drum==='ohat'?(n.d||0.5):n.drum==='crash'?1:0.25,drum:n.drum,n:DRUM_NOTE[n.drum],v:n.v,src:n});
     else out.push({b,d:n.d,n:clamp(DSP.snapPitch(n.p,root,S.scale)+12*tr.octave,0,127),v:n.v,env:tr.dyn!==false&&I.env?n.env:null,src:n});
   }
   out.sort((a,b)=>a.b-b.b||a.n-b.n);
@@ -210,12 +230,28 @@ function noiseHit(c,dest,t,o){
   const filt=(type,fr,q)=>{const f=c.createBiquadFilter();f.type=type;f.frequency.value=fr;if(q)f.Q.value=q;node.connect(f);node=f;};
   if(o.hp)filt('highpass',o.hp);if(o.bp)filt('bandpass',o.bp,o.q||1);if(o.lp)filt('lowpass',o.lp);
   const hold=o.hold||0;g.gain.setValueAtTime(Math.max(o.gain,0.001),t);
-  if(hold>0){s.loop=true;g.gain.exponentialRampToValueAtTime(Math.max(o.gain*0.4,0.001),t+hold);} // a held sound: rings on, then dies away
+  if(hold>0||o.dec>0.45)s.loop=true;if(hold>0){g.gain.exponentialRampToValueAtTime(Math.max(o.gain*0.4,0.001),t+hold);} // a held sound: rings on, then dies away
   g.gain.exponentialRampToValueAtTime(0.0008,t+hold+o.dec);
   node.connect(g).connect(dest);s.start(t,Math.random()*0.5);s.stop(t+hold+o.dec+0.02);
 }
 function playDrum(c,dest,t,type,vel,kitId,len){
   const K=KITS[kitId]||KITS.punch;let v=Math.pow(vel/127,1.3);
+  if(type==='clap'){ // a few hands slightly apart, then the room
+    const b=kitId==='808'?1100:kitId==='boom'?1250:1500;
+    for(const d of [0,0.011,0.022])noiseHit(c,dest,t+d,{bp:b,q:1.1,dec:0.011,gain:v*1.35});
+    noiseHit(c,dest,t+0.031,{bp:b*0.9,q:0.7,dec:kitId==='trap'?0.26:0.19,gain:v*1.35});return;}
+  if(type==='snap'){ // finger snap: a short bright crack with a little body
+    noiseHit(c,dest,t,{bp:2700,q:2,dec:0.035,gain:v*1.5});
+    const o=c.createOscillator(),g=c.createGain();o.frequency.setValueAtTime(2100,t);o.frequency.exponentialRampToValueAtTime(1500,t+0.03);
+    g.gain.setValueAtTime(Math.max(v*0.25,0.001),t);g.gain.exponentialRampToValueAtTime(0.0008,t+0.04);o.connect(g).connect(dest);o.start(t);o.stop(t+0.05);return;}
+  if(type==='crash'){ // a wash of noise and metal that dies away slowly
+    const p=K.hat,dec=kitId==='808'?2.2:1.7;
+    noiseHit(c,dest,t,{hp:4300,dec,gain:v*0.34});noiseHit(c,dest,t,{bp:6500,q:0.6,dec:0.3,gain:v*0.3});
+    if(p.metal){const g=c.createGain(),hp=c.createBiquadFilter();hp.type='highpass';hp.frequency.value=5000;
+      g.gain.setValueAtTime(Math.max(v*0.12,0.001),t);g.gain.exponentialRampToValueAtTime(0.0008,t+dec);
+      for(const fr of [205.3,304.4,369.6,522.7,540,800]){const o=c.createOscillator();o.type='square';o.frequency.value=fr*2.1;o.connect(hp);o.start(t);o.stop(t+dec+0.02);}
+      hp.connect(g).connect(dest);}
+    return;}
   if(type==='kick'){
     const p=K.kick,o=c.createOscillator(),g=c.createGain(),s=sat(c,p.drive),og=c.createGain();
     o.frequency.setValueAtTime(p.f0,t);o.frequency.exponentialRampToValueAtTime(p.f1,t+p.drop);
@@ -532,11 +568,19 @@ function cancelRec(msg){
 }
 function fade(d,sr){const n=Math.min(d.length>>1,Math.round(sr*0.006));for(let i=0;i<n;i++){const g=i/n;d[i]*=g;d[d.length-1-i]*=g;}}
 /* What the sorter may compare a new take against: hits already on this track and hits the user has corrected */
-function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null).map(n=>({f:n.f,drum:n.drum})).concat(S.learned):null;}
+function drumNote(tr,e,t,sp){const drum=(tr.map&&tr.map[e.drum])||e.drum,n={t,drum,c:e.drum,v:e.v,f:e.f};if(drum==='ohat')n.d=Math.max(0.25,e.d/sp);return n;}
+function setRowSound(tr,from,to){ // every hit on one row becomes another sound; later takes follow
+  if(from===to)return;keep(tr);const cls=new Map();
+  for(const n of tr.notes)if(n.drum===from){n.drum=to;const c=n.c||CLASS_OF[from];cls.set(c,(cls.get(c)||0)+1);if(to==='ohat'&&!n.d)n.d=0.5;}
+  tr.map=tr.map||{};for(const k in tr.map)if(tr.map[k]===from)tr.map[k]=to;
+  for(const [c] of cls)tr.map[c]=to;
+  if(tr.extra)tr.extra=tr.extra.filter(r=>r!==from);invalidate();save();renderTracks();
+}
+function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null).map(n=>({f:n.f,drum:n.c||CLASS_OF[n.drum]||n.drum})).concat(S.learned):null;}
 const NOTHING='Didn’t catch anything. Get closer to the mic, or raise mic sensitivity in Settings.';
 async function finishRec(){
   const tr=R.track,I=INST[tr.inst],sr=ctx.sampleRate,pre=0.1,sp=60/R.bpm,len=R.lenBeats;
-  const x=capSlice(R.tStart+R.lat-pre,R.tEnd+R.lat+0.06);capStop();R.state='analysing';
+  const x=capSlice(R.tStart+R.lat-pre,R.tEnd+R.lat+0.06),noise=capSlice(R.tStart+R.lat-0.85,R.tStart+R.lat-0.15);capStop();R.state='analysing';
   if(window.melodeas.debug)window.melodeas.lastX=x;
   try{
     if(I.kind==='audio'){
@@ -544,11 +588,11 @@ async function finishRec(){
       if(pk<0.01)setStatus(NOTHING,6000);
       else{const layered=!!tr.audio;fade(data,sr);for(const s of activeSrc)try{s.stop();}catch(e){}commitTake(tr,{audio:{data,sr,bpm:R.bpm},lenBeats:len});S.tracks.forEach(kickAudio);setStatus(layered?'Voice recorded on top of the earlier take.':'Voice recorded.',3000);}
     }else{
-      const res=await analyse({mode:I.kind==='drum'?I.mode:'melodic',x,sr,sens:S.sens,known:knownDrums(tr)});
+      const res=await analyse({mode:I.kind==='drum'?I.mode:'melodic',x,sr,sens:S.sens,known:knownDrums(tr),noise:noise.some(v=>v!==0)?noise:null});
       const notes=[],had=tr.lenBeats>0?tr.notes.length:0;
       for(const e of res.events){
         let t=(e.t-pre)/sp;if(t<-pre/sp||t>=len)continue;
-        if(I.kind==='drum')notes.push(e.drum==='ohat'?{t:Math.max(0,t),drum:e.drum,v:e.v,f:e.f,d:Math.max(0.25,e.d/sp)}:{t:Math.max(0,t),drum:e.drum,v:e.v,f:e.f});
+        if(I.kind==='drum')notes.push(drumNote(tr,e,Math.max(0,t),sp));
         else{let d=e.d/sp;if(t<0){d+=t;t=0;}if(d>0.05)notes.push(e.env?{t,d,p:e.p,v:e.v,env:e.env}:{t,d,p:e.p,v:e.v});}
       }
       if(!notes.length)setStatus(NOTHING,6000);
@@ -574,7 +618,7 @@ async function finishFree(){
       commitTake(tr,{audio:{data,sr,bpm:tm.bpm},lenBeats:len});}
     else{const notes=[];
       for(const e of res.events){const t=(e.t-first)/sp;if(t<0||t>=len)continue;
-        notes.push(I.kind==='drum'?(e.drum==='ohat'?{t,drum:e.drum,v:e.v,f:e.f,d:Math.max(0.25,e.d/sp)}:{t,drum:e.drum,v:e.v,f:e.f}):{t,d:e.d/sp,p:e.p,v:e.v});}
+        notes.push(I.kind==='drum'?drumNote(tr,e,t,sp):{t,d:e.d/sp,p:e.p,v:e.v});}
       commitTake(tr,{notes,lenBeats:len});}
     startTransport(tStop,ctx.currentTime);kickAudio(tr);
     setStatus('Loop set: '+tm.bars+(tm.bars===1?' bar':' bars')+' at '+S.bpm+' bpm. Everything you add now follows it.',6000);
@@ -637,13 +681,13 @@ async function exportMix(){
 }
 
 /* ---------- the board: every track on one grid, the selected one in front ---------- */
-const ROW_LABEL={kick:'kick',snare:'snare',hat:'hat',ohat:'open'},ALL_ROWS=['ohat','hat','snare','kick'],GREY='#8C8C8C';
+const ROW_LABEL={kick:'kick',snare:'snare',clap:'clap',snap:'snap',hat:'hat',ohat:'open hat',crash:'crash'},ALL_ROWS=['crash','ohat','hat','snap','clap','snare','kick'],GREY='#8C8C8C';
 const B={cv:null,view:null,dragRange:null,zoom:1,b0:0,gest:0};
 function setView(zoom,b0,LB){LB=LB||loopBeats();B.zoom=clamp(zoom,1,Math.max(1,LB*2));B.b0=clamp(b0,0,LB-LB/B.zoom);}
 function zoomAt(f,x,w){const LB=loopBeats(),b=B.b0+x/w*LB/B.zoom,z=clamp(B.zoom*f,1,Math.max(1,LB*2));setView(z,b-x/w*LB/z,LB);} // keeps the beat under x in place
 function boardLayout(w,H,LB){
   const kind=k=>S.tracks.filter(t=>INST[t.inst].kind===k),drumT=kind('drum'),melT=kind('melodic'),audT=kind('audio');
-  const rows=ALL_ROWS.filter(r=>drumT.some(t=>DRUM_ROWS[INST[t.inst].mode].includes(r))),L={w,H,LB};let y=0;
+  const sel=selTrack(),rows=ALL_ROWS.filter(r=>drumT.some(t=>t.notes.some(n=>n.drum===r))||(sel&&sel.extra&&sel.extra.includes(r))),L={w,H,LB};let y=0;
   if(audT.length){const hA=melT.length||rows.length?Math.min(56,H*0.18):H;L.aud={y0:0,h:hA};y=hA;}
   const dh=rows.length?(melT.length?Math.min(rows.length*28,H*0.36):H-y):0;
   if(rows.length)L.drum={y0:H-dh,h:dh,rows,rh:dh/rows.length};
@@ -693,9 +737,10 @@ function drawBoard(pos,LB){
       if(tr.peaks)for(let j=0;j<tiles;j++){const x0=X(j*tr.lenBeats),tw=tr.lenBeats*pxb,n=tr.peaks.length;g.globalAlpha=(j?0.5:0.95)*dim;
         for(let i=0;i<n;i++){const x=x0+i/n*tw;if(x>w)break;const a=Math.max(1,tr.peaks[i]*A.h*0.9);g.fillRect(x,A.y0+(A.h-a)/2,Math.max(1,tw/n-0.5),a);}}
     }else if(I.kind==='drum'){
-      const G=tr.geom={w:W,LB,b0,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:DRUM_ROWS[I.mode]},bw=clamp(pxb*0.2,6,36),bh=Math.min(G.rh*0.6,34);
+      if(!D){tr.geom=null;continue;}
+      const G=tr.geom={w:W,LB,b0,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:D.rows},bw=clamp(pxb*0.2,6,36),bh=Math.min(G.rh*0.6,34);
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9)continue;
-        const x=X(b),y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?Math.max(bw,e.d*pxb-1.5):bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
+        const x=X(b),y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?Math.max(bw,e.d*pxb-1.5):e.drum==='crash'?bw*3:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
         g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n,rs:e.drum==='ohat'});}
     }else{
       const off=tr.dOff||0,G=tr.geom={w:W,LB,b0,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo-off,hi:M.hi-off};
@@ -719,7 +764,7 @@ function drumAt(G,y){ // the drum row under the pointer, kept to the drums this 
   const i=clamp(Math.floor((y-G.y0)/G.rh),0,G.rows.length-1);let best=null,bd=99;
   for(const r of G.allowed){const d=Math.abs(G.rows.indexOf(r)-i);if(d<bd){bd=d;best=r;}}return best;}
 function selectTrack(tr){ // null, or the track that is already selected, goes back to the view of everything
-  if(R.state!=='idle')return;S.sel=tr?tr.id:null;pruneEmpty();invalidate();statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
+  if(R.state!=='idle')return;for(const t of S.tracks)if(t!==tr)t.extra=null;S.sel=tr?tr.id:null;pruneEmpty();invalidate();statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
 function addNoteAt(tr,e){
   const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G||y<G.y0||y>G.hh)return;
   keep(tr);if(!tr.lenBeats)tr.lenBeats=G.LB;
@@ -827,7 +872,7 @@ function renderTracks(){
     const tr=cur,I=INST[tr.inst];box.style.setProperty('--c',I.color);
     box.append(h('div',{className:'row'},h('div',{className:'tn'},chipLabel(tr),h('small',{},tr.mute?'Muted. Tap its name at the top to unmute.':tr.solo?'Solo. Hold its name at the top to end it.':'Next take goes here')),
       h('input',{type:'range',min:0,max:1,step:0.01,value:tr.vol,'aria-label':'Volume',oninput:e=>{tr.vol=+e.target.value;applyMix(tr);save();}})));
-    const row3=h('div',{className:'row'});
+    const row3=h('div',{className:'row'}),extraRows=[];
     if(I.kind==='melodic'){
       const fam=FAMILY[chipOf(tr)];
       if(fam){const s=h('select',{'aria-label':'Sound',onchange:e=>setInst(tr,e.target.value)});
@@ -839,13 +884,20 @@ function renderTracks(){
       const s=h('select',{'aria-label':'Drum kit',onchange:e=>{tr.kit=e.target.value;save();renderTracks();preview(tr);}});
       for(const k in KIT_NAMES)s.append(h('option',{value:k,textContent:KIT_NAMES[k],selected:k===tr.kit}));
       row3.append(s);
+      const present=ALL_ROWS.filter(r=>tr.notes.some(n=>n.drum===r)||(tr.extra&&tr.extra.includes(r))).reverse(),snd=h('div',{className:'row snds'},h('span',{className:'oct'},'Sounds'));
+      for(const r of present){const sel=h('select',{'aria-label':'Sound of the '+ROW_LABEL[r]+' row',onchange:e=>setRowSound(tr,r,e.target.value)});
+        for(const k of ALL_ROWS.slice().reverse())sel.append(h('option',{value:k,textContent:DRUM_NAME[k],selected:k===r}));snd.append(sel);}
+      const missing=ALL_ROWS.slice().reverse().filter(r=>!present.includes(r));
+      if(missing.length){const add=h('select',{'aria-label':'Add a drum sound',onchange:e=>{if(!e.target.value)return;tr.extra=(tr.extra||[]).concat(e.target.value);renderTracks();setStatus('Double-tap the new row to add hits, or drag hits into it.',4000);}},
+        h('option',{value:'',textContent:'+ Sound'}));for(const k of missing)add.append(h('option',{value:k,textContent:DRUM_NAME[k]}));snd.append(add);}
+      extraRows.push(snd);
     }
     row3.append(
       h('button',{className:'sm',textContent:'Effects','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this instrument',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
       h('button',{className:'sm',textContent:'Clear',title:'Empty this track',onclick:()=>{if(!hasContent(tr))return;keep(tr);tr.notes=[];tr.audio=null;tr.peaks=null;tr.buf=null;tr.lenBeats=0;invalidate();renderTracks();setStatus('Track cleared. “Undo last change” brings it back.',4000);}}));
     if(I.kind==='audio'&&tr.audio)row3.append(h('button',{className:'sm',textContent:'WAV',title:'Export this voice track',onclick:()=>download(DSP.encodeWav([tr.audio.data],tr.audio.sr),'melodeas-voice-'+stamp()+'.wav','audio/wav')}));
     row3.append(h('button',{className:'sm',textContent:'Delete',onclick:()=>removeTrack(tr)}));
-    box.append(row3);if(tr.eqOpen)box.append(eqPanel(tr));
+    box.append(row3,...extraRows);if(tr.eqOpen)box.append(eqPanel(tr));
   }
   idleStatus();
 }
@@ -876,7 +928,8 @@ function init(){
     if(ctx&&ctx.state==='running')ctx.suspend().catch(()=>{});};
   document.addEventListener('visibilitychange',()=>{if(document.hidden)quiet();});window.addEventListener('pagehide',quiet);
   try{const s=localStorage.getItem('melodeas.v1');if(s)restore(JSON.parse(s));}catch(e){}
-  pruneEmpty();syncControls();renderTracks();
+  syncControls();renderTracks(); // voice tracks wait for their audio before empty tracks are tidied away
+  Promise.race([loadAudio(),sleep(2000)]).then(()=>{pruneEmpty();invalidate();renderTracks();});
 
   const menu=$('#menu'),sheet=$('#settings');
   $('#menuBtn').onclick=()=>menu.showModal();$('#loopBtn').onclick=()=>sheet.showModal();

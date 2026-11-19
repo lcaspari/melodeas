@@ -77,6 +77,18 @@ let fails = 0; const check = (name, ok, extra) => { console.log((ok ? 'PASS ' : 
   check('drums: breathy "p" only -> kick (not hat)',rp.every(h=>h.drum!=='hat'&&h.drum!=='ohat'),rp.map(h=>h.drum).join(' '));
 }
 
+// --- 4a2. other ways to play drums: a hand clap, a finger snap, a deep voiced "boom"
+{
+  const clap=amp=>{const n=Math.round(sr*0.2),nz=new Float32Array(n);for(let i=0;i<n;i++){const t=i/sr,e=Math.exp(-t/0.004)+Math.exp(-Math.max(0,t-0.011)/0.004)*(t>0.011)+Math.exp(-Math.max(0,t-0.022)/0.03)*(t>0.022);nz[i]=rnd()*e;}
+    const bp=biquadBand(nz,1400,0.9,'bp');for(let i=0;i<n;i++)bp[i]*=amp*2;return bp;};
+  const snap=amp=>{const n=Math.round(sr*0.1),nz=new Float32Array(n);for(let i=0;i<n;i++)nz[i]=rnd()*Math.exp(-i/(sr*0.006));const bp=biquadBand(nz,2800,1.5,'bp');for(let i=0;i<n;i++)bp[i]*=amp*2.5;return bp;};
+  const boom=amp=>{const n=Math.round(sr*0.3),x=new Float32Array(n);for(let i=0;i<n;i++){const t=i/sr,e=Math.min(1,t/0.01)*Math.exp(-t/0.12);let v=0;for(let h=1;h<=8;h++)v+=Math.sin(2*Math.PI*110*h*t)/h;x[i]=amp*e*v;}return x;};
+  const r=D.analyse({mode:'kit',x:place(2.4,[[0.2,boom(0.4)],[0.7,clap(0.5)],[1.2,boom(0.4)],[1.7,clap(0.5)]]),sr,sens:1}).events;
+  check('drums: deep "boom" = kick, hand clap = snare',r.length===4&&r.map(h=>h.drum).join()==='kick,snare,kick,snare',r.map(h=>h.drum+'@'+Math.round(2**h.f)+'Hz').join(' '));
+  const r2=D.analyse({mode:'kit',x:place(2.4,[[0.2,boom(0.4)],[0.7,snap(0.5)],[1.2,boom(0.4)],[1.7,snap(0.5)]]),sr,sens:1}).events;
+  check('drums: finger snap is found and is not kick',r2.length===4&&r2[1].drum!=='kick'&&r2[3].drum!=='kick',r2.map(h=>h.drum+'@'+Math.round(2**h.f)+'Hz').join(' '));
+}
+
 // --- 4b. a breathy "p": mostly low thump plus some hiss. Used to come out as snare.
 function pBurst(amp){const n=Math.round(sr*0.2),x=new Float32Array(n),nz=new Float32Array(n);
   for(let i=0;i<n;i++)nz[i]=rnd()*Math.exp(-i/(sr*0.015));

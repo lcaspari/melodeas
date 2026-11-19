@@ -36,7 +36,7 @@ What to perform:
 
 | Track | What to do |
 | --- | --- |
-| Drums | "p" or "b" for kick, "k" for snare, "ts" for hat; a held "tsss" becomes an open hat as long as you hold it. It works out by itself which drums are in a take |
+| Drums | beatbox ("p" or "b" for kick, "k" for snare, "ts" for hat, a held "tsss" for an open hat as long as you hold it), or clap, snap your fingers or make a deep "boom". Deep sounds become kick, middle ones snare, bright ones hat. Only the drums you actually recorded get a row on the board |
 | Toms | "dum dum" at different pitches; higher and lower sounds become higher and lower toms |
 | Bass, Lead, Pluck, Keys, Pad, Brass | sing or hum, one note at a time |
 | Voice | recorded as audio, not converted |
@@ -45,7 +45,8 @@ What to perform:
 
 Select an instrument to see its controls. All sounds are synthesised in the browser (Web Audio), with reverb and echo.
 
-- **Drum kits:** Punchy, 808, Boom bap, Trap.
+- **Drum kits:** Punchy, 808, Boom bap, Trap, each with kick, snare, clap, snap, hi-hat, open hat and crash.
+- **Drum sounds per row:** select the Drums instrument and use "Sounds" to change what a row plays (for example snare → clap); later takes on that instrument follow the change. "+ Sound" adds an empty row (for example crash) that you can fill by double-tapping or by dragging hits into it.
 - **Bass:** Synth bass, Sub bass, 808 bass, Reese bass, Acid bass.
 - **Lead:** Supersaw, Square lead, Pluck, FM bell.
 - **Keys:** Electric piano, Piano, Lo-fi keys, Organ.
@@ -67,6 +68,7 @@ In the selected instrument: drag a note to move it in time and pitch (or between
 - **Tempo:** the default is a metronome with a count-in, because it is the most reliable. "First take: Set the tempo" is the loop-pedal way: no click, press the button again on the first beat of the next round, and the tempo and bar count are worked out from the take.
 - **Speakers:** in "Speakers" mode the loop is turned down while recording and the browser's echo cancelling is switched on. "Headphones" turns both off and gives the cleanest detection.
 - **Timing offset:** sound takes time to leave the speakers and return through the mic. The page estimates this; "Measure with speakers" in Settings measures it properly.
+- **Background noise:** before detection the take is filtered below 90 Hz (drums) or 55 Hz (melodies), the steady background is estimated per frequency from the quietest fifth of the take and subtracted, and a hit must stand clearly above it. In a noisy place, sounds centred below 200 Hz (road bumps, engine rumble) are ignored. Melodies use the quiet count-in before the take to set their loudness gate. On synthetic car noise this took noise-only takes from about 30 false kicks to none.
 - **Detection:** onsets come from spectral flux, drums are sorted by brightness (dark = kick, mid = snare, bright = hat), pitch comes from the YIN algorithm. Velocity follows how loud each hit or note was.
 - **Kick or snare:** a take with only one kind of sound is read as kick unless it is clearly bright (then snare, or hat if very bright). A take only splits into several drums where the sounds clearly fall apart in brightness. A second take is compared with the hits already on the track. When you correct a hit, that sound is remembered and later takes follow the correction.
 - **Each track keeps its own length**, so a 1-bar beat keeps repeating under a 4-bar bass line if you change "Loop length" between takes.
@@ -75,7 +77,7 @@ In the selected instrument: drag a note to move it in time and pitch (or between
 ## Known limits
 
 - One note at a time per melodic track (no chords).
-- Voice tracks are audio: they are not in the MIDI file (use the WAV button on the track), and the autosave in the browser does not keep them. "Save project" does.
+- Voice tracks are audio: they are not in the MIDI file (use the WAV button on the track). The browser keeps them between visits (in its IndexedDB storage), and "Save project" includes them.
 - Changing the tempo after recording a voice track plays it faster or slower, like tape.
 - Leaving the app (home button, switching apps, locking the phone) stops playback and recording and releases the microphone.
 
