@@ -179,6 +179,10 @@ async def main():
         await page.click('#play'); await page.wait_for_timeout(1500)
         r = await page.evaluate("(()=>{const m=window.melodeas,t=m.S.tracks[0];return {d:window.__hit.drum,l:m.S.learned.length,fz:!!(t.frozen&&t.frozen.key.includes('snare'))}})()")
         check('drag kick to snare: changed, remembered, and heard', r['d']=='snare' and r['l']==1 and r['fz'], r)
+        await open_settings(page)
+        async with page.expect_download() as dl: await page.click('#saveTake')
+        n=(await dl.value).suggested_filename; await close_dlg(page)
+        check('Settings saves the last raw take as WAV', n.startswith('melodeas-take-drums') and n.endswith('.wav'), n)
         # ---- 6. instrument bar: tap the selected one to mute, hold to solo, + adds a second of the same kind
         await page.click('.chip:has-text("Drums")'); await page.wait_for_timeout(100)
         r = await page.evaluate("window.melodeas.S.tracks[0].mute")

@@ -276,6 +276,8 @@ dialog .icon{margin-right:-10px}
     <div class="srow"><span>Mic level</span><div><meter id="meter" min="0" max="1" low="0.02" high="0.7" optimum="0.3" value="0"></meter><button class="btn" id="micOn">Turn mic on</button></div></div>
     <label class="srow"><span>Mic sensitivity</span><select id="sens"><option value="0.6">Low (noisy room)</option><option value="1">Normal</option><option value="1.8">High (quiet voice)</option></select></label>
     <div class="srow"><span>Timing offset, ms</span><div><input type="number" id="lat" min="0" max="500" step="1" placeholder="auto"><button class="btn" id="latAuto">Auto</button><button class="btn" id="calib">Measure with speakers</button></div></div>
+    <div class="srow"><span>Drum corrections<small>Hits you dragged to another drum teach the sorting</small></span><div><button class="btn" id="forget">Forget them</button></div></div>
+    <div class="srow"><span>Last take<small>The raw recording, for checking what the mic heard</small></span><div><button class="btn" id="saveTake">Save as WAV</button></div></div>
     <p class="note" id="latNote">The timing offset is how long sound takes to leave the speakers and come back through the mic. If your notes land late or early against the click, measure it once: turn the speakers up and press “Measure with speakers”.</p>
   </div>
 </dialog>
@@ -320,13 +322,13 @@ function spectral(x,sr){
   const g=1/peak,fft=makeFFT(N),win=new Float32Array(N);
   for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
   const re=new Float32Array(N),im=new Float32Array(N);
-  const flux=new Float32Array(nF),rms=new Float32Array(nF),cen=new Float32Array(nF),den=new Float32Array(nF),cl=new Float32Array(nF),snr=new Float32Array(nF);
+  const flux=new Float32Array(nF),rms=new Float32Array(nF),cen=new Float32Array(nF),den=new Float32Array(nF),cl=new Float32Array(nF),snr=new Float32Array(nF),lo=new Float32Array(nF),hi=new Float32Array(nF);
   const lf=new Float32Array(bins);for(let k=1;k<bins;k++)lf[k]=Math.log2(k*sr/N);
   // Flux is summed over log-spaced bands so a dull thump counts as much as a bright hiss
   const NB=24,kLo=Math.max(1,Math.round(100*N/sr)),kHi=Math.min(bins-1,Math.round(11000*N/sr)),nb=kHi-kLo+1;
   const band=new Uint8Array(bins),lr=Math.log(kHi/kLo);
   for(let k=kLo;k<=kHi;k++)band[k]=Math.min(NB-1,Math.floor(NB*Math.log(k/kLo)/lr));
-  const P=new Float32Array(nF*nb);
+  const P=new Float32Array(nF*nb),kLow=Math.round(400*N/sr),kHigh=Math.round(5000*N/sr);
   for(let f=0;f<nF;f++){
     const o=f*H;let e=0;
     for(let i=0;i<N;i++){const v=x[o+i];e+=v*v;re[i]=v*g*win[i];im[i]=0;}
@@ -339,23 +341,23 @@ function spectral(x,sr){
     for(let k=0;k<nb;k++){for(let f=0;f<nF;f++)col[f]=P[f*nb+k];col.sort();nz[k]=col[q]*4.48;nSum+=nz[k];}} // for noise, the 20th percentile of power is 0.223 x its mean
   const ring=[new Float32Array(NB),new Float32Array(NB),new Float32Array(NB)],acc=new Float32Array(NB);
   for(let f=0;f<nF;f++){
-    const cur=ring[f%3],old=ring[(f+1)%3];let fl=0,num=0,dn=0,raw=0;acc.fill(0);
+    const cur=ring[f%3],old=ring[(f+1)%3];let fl=0,num=0,dn=0,raw=0,el=0,eh=0;acc.fill(0);
     for(let k=kLo;k<=kHi;k++){const p=P[f*nb+k-kLo];raw+=p;let c=p-1.5*nz[k-kLo];if(c<0)c=0; // a little over-subtraction
-      acc[band[k]]+=Math.sqrt(c);num+=lf[k]*c;dn+=c;}
+      acc[band[k]]+=Math.sqrt(c);num+=lf[k]*c;dn+=c;if(k<kLow)el+=c;else if(k>kHigh)eh+=c;}
     for(let b=0;b<NB;b++){const lm=Math.log(1+acc[b]);if(f>=2){const d=lm-old[b];if(d>0)fl+=d;}cur[b]=lm;}
-    flux[f]=fl;den[f]=dn;cen[f]=dn>0?num/dn:0;
+    flux[f]=fl;den[f]=dn;cen[f]=dn>0?num/dn:0;lo[f]=dn>0?el/dn:0;hi[f]=dn>0?eh/dn:0;
     cl[f]=raw>0?rms[f]*Math.sqrt(dn/raw):0;          // level of what stands out above the noise
     snr[f]=nSum>0?dn/nSum:1e6;
   }
   let dmax=0;for(let f=0;f<nF;f++)if(den[f]>dmax)dmax=den[f];
-  return {N,H,nF,flux,rms,cl,snr,cen,den,peak,noisy:dmax>0&&nSum/dmax>3e-4}; // background within ~35 dB of the loudest moment
+  return {N,H,nF,flux,rms,cl,snr,cen,den,lo,hi,peak,noisy:dmax>0&&nSum/dmax>3e-4}; // background within ~35 dB of the loudest moment
 }
 
 /* ---------- Percussive hits: time, loudness, brightness, ring length ---------- */
 function detectHits(x,sr,sens){
   sens=sens||1;
   x=highpass(highpass(x,sr,90),sr,90); // steep low cut: road bumps and engine rumble sit below the lowest beatboxed kick
-  const sp=spectral(x,sr),{flux,cl:rms,snr,cen,den,N,H,nF,noisy}=sp; // levels are measured after the background is removed
+  const sp=spectral(x,sr),{flux,cl:rms,snr,cen,den,lo,hi,N,H,nF,noisy}=sp; // levels are measured after the background is removed
   let fmax=0;for(let i=0;i<nF;i++)if(flux[i]>fmax)fmax=flux[i];
   if(fmax<=0)return [];
   const thr=0.12*fmax/sens,m=Math.max(2,Math.round(0.03*sr/H)),w=Math.round(0.12*sr/H);
@@ -369,11 +371,11 @@ function detectHits(x,sr,sens){
     if(k&&v<1.5*s/k)continue;
     let level=0,lf=n,sn=0;for(let j=n;j<Math.min(nF,n+7);j++){if(rms[j]>level){level=rms[j];lf=j;}if(snr[j]>sn)sn=snr[j];}
     if(sn<1/sens)continue; // must stand clearly above the background noise
-    let cs=0,ds=0;for(let j=n;j<Math.min(nF,n+4);j++){cs+=cen[j]*den[j];ds+=den[j];}
+    let cs=0,ds=0,ls=0,hs=0;for(let j=n;j<Math.min(nF,n+4);j++){cs+=cen[j]*den[j];ls+=lo[j]*den[j];hs+=hi[j]*den[j];ds+=den[j];}
     let q=lf;while(q<nF&&rms[q]>=0.3*level)q++;
     const fc=ds>0?Math.round(cs/ds*100)/100:9;
     if(noisy&&fc<7.64)continue; // in a noisy place, nothing a mouth or hand makes is centred below 200 Hz: that is rumble or a bump
-    c.push({t:(n*H+N*0.5)/sr-0.003,flux:v,level,f:fc,dur:(q-n)*H/sr});
+    c.push({t:(n*H+N*0.5)/sr-0.003,flux:v,level,f:fc,lo:ds>0?Math.round(ls/ds*100)/100:0,hi:ds>0?Math.round(hs/ds*100)/100:0,dur:(q-n)*H/sr});
   }
   let lmax=0;for(const h of c)if(h.level>lmax)lmax=h.level;
   const gate=Math.max(0.003,0.06*lmax)/sens;
@@ -396,8 +398,14 @@ function kmeans1d(v,k){
   return {c,asg};
 }
 
-/* Sort hits into drums by brightness f (log2 Hz): dark = kick ("p","b"), mid = snare ("k"), bright = hat ("ts").
-   known = [{f,drum}] from notes already on the track and from the user's own corrections; it outranks the built-in thresholds. */
+/* Sort hits into drums by where their energy sits:
+   kick ("p", "b", a deep "boom") has real energy below 400 Hz; hat ("ts") has most of it above 5 kHz;
+   everything else ("k", a clap, a snap, a darker "tsch") is snare.
+   known = [{f,lo,hi,drum}] from hits already on the track and from the user's own corrections: a hit that
+   sounds like one of them (brightness, low share and high share all close) follows it, but a sound with no
+   low energy is never made a kick and one with no high energy is never made a hat. */
+const KICK_LO=0.07,HAT_HI=0.5;
+function drumOf(h){return h.lo>=KICK_LO?'kick':(h.hi>=HAT_HI||h.f>=Math.log2(4500))?'hat':'snare';}
 function labelDrums(hits,mode,known){
   if(!hits.length)return hits;
   const vel=()=>{ // loudness is judged within each drum: a soft "ts" next to a loud "b" is still a full hat
@@ -405,44 +413,27 @@ function labelDrums(hits,mode,known){
     for(const h of hits){const dB=20*Math.log10(h.level/mx[h.drum==='ohat'?'hat':h.drum]);h.v=Math.round(clamp(118+dB*3.5,25,127));}
     return hits;};
   if(mode==='hat'){for(const h of hits)h.drum=h.dur>0.16?'ohat':'hat';return vel();}
-  const K=mode==='kit'?3:2,names=['kick','snare','hat'],L=Math.log2;
-  const v=hits.map(h=>h.f);
-  const abs=c=>K===3?(c<L(1300)?0:c<L(4200)?1:2):(c<L(1300)?0:1);
-  const ks=[0,0,0],kn=[0,0,0];
-  for(const k of known||[]){const ci=names.indexOf(k.drum==='ohat'?'hat':k.drum);if(ci>=0&&ci<K&&isFinite(k.f)){ks[ci]+=k.f;kn[ci]++;}}
-  const anyKnown=kn[0]+kn[1]+kn[2]>0;
-  let groups=null;
-  for(let k=Math.min(K,hits.length);k>=1&&!groups;k--){
-    const km=kmeans1d(v,k);let g=[];
-    for(let j=0;j<k;j++){const idx=[];for(let i=0;i<v.length;i++)if(km.asg[i]===j)idx.push(i);if(idx.length)g.push({mean:km.c[j],idx});}
-    g.sort((a,b)=>a.mean-b.mean);
-    // split only where the sounds really fall apart: centres 0.7 octave apart and a clear gap between the groups
-    let ok=true;for(let j=1;j<g.length;j++){const hiPrev=Math.max(...g[j-1].idx.map(i=>v[i])),loNext=Math.min(...g[j].idx.map(i=>v[i]));
-      if(g[j].mean-g[j-1].mean<0.7||loNext-hiPrev<0.6)ok=false;}
-    if(ok||k===1)groups=g;
+  const refs=(known||[]).filter(k=>isFinite(k.f)&&k.lo!=null&&k.hi!=null).map(k=>({f:k.f,lo:k.lo,hi:k.hi,drum:k.drum==='ohat'?'hat':k.drum}));
+  // group the take's hits: same kind by their energy, and close in brightness (a gap of 0.6 octave splits a group)
+  const groups=[];
+  for(const c of ['kick','snare','hat']){
+    const idx=hits.map((h,i)=>i).filter(i=>drumOf(hits[i])===c).sort((a,b)=>hits[a].f-hits[b].f);
+    let g=[];for(const i of idx){if(g.length&&hits[i].f-hits[g[g.length-1]].f>=0.6){groups.push({c,idx:g});g=[];}g.push(i);}
+    if(g.length)groups.push({c,idx:g});
   }
-  const rule=groups.map(g=>{
-    const m=g.mean;let near=-1,nd=0.6,lb=0,ub=K-1;
-    for(let c=0;c<K;c++){if(!kn[c])continue;const kc=ks[c]/kn[c],d=Math.abs(m-kc);
-      if(d<nd){nd=d;near=c;}
-      if(m>kc+0.6)lb=Math.max(lb,Math.min(K-1,c+1));if(m<kc-0.6)ub=Math.min(ub,Math.max(0,c-1));}
-    return {m,near,lb,ub};
-  });
-  let lab;
-  if(groups.length===1){const r=rule[0];
-    if(r.near>=0)lab=[r.near];
-    else{ // one kind of sound and nothing to compare against: kick unless it is clearly bright
-      const a=!anyKnown?(r.m<L(2600)?0:K===3&&r.m>=L(4200)?2:1):abs(r.m);lab=[r.lb<=r.ub?clamp(a,r.lb,r.ub):a];}
-  }else{ // several groups: the brighter group is the higher drum; pick the order that best fits typical sounds and the references
-    const proto=[L(900),L(3000),L(8000)];let best=null,bc=1e9;
-    const walk=(gi,from,acc,cost)=>{if(cost>=bc)return;if(gi===groups.length){bc=cost;best=acc.slice();return;}
-      for(let c=from;c<=K-(groups.length-gi);c++){const r=rule[gi];
-        const cc=r.near>=0?(c===r.near?0:4):Math.abs(r.m-proto[c])+(c<r.lb||c>r.ub?3:0);
-        acc.push(c);walk(gi+1,c+1,acc,cost+cc);acc.pop();}};
-    walk(0,0,[],0);lab=best;
+  for(const g of groups){
+    // hits that sound like a reference vote for its drum; the group follows the majority
+    const votes={};
+    for(const i of g.idx){const h=hits[i];let best=null,bd=2.4;
+      for(const r of refs){const dist=Math.abs(h.f-r.f)/0.5+Math.abs(h.lo-r.lo)/0.1+Math.abs(h.hi-r.hi)/0.15;if(dist<bd){bd=dist;best=r;}}
+      if(best)votes[best.drum]=(votes[best.drum]||0)+1;}
+    let win=g.c,wn=0;for(const k in votes)if(votes[k]>wn){wn=votes[k];win=k;}
+    for(const i of g.idx){const h=hits[i];let d=g.c;
+      if(!(win==='kick'&&h.lo<0.04)&&!(win==='hat'&&h.hi<0.2))d=win; // a reference cannot contradict the sound itself
+      if(mode==='kicksnare'&&d==='hat')d='snare';
+      if(mode==='kit'&&d==='hat'&&h.dur>0.16)d='ohat'; // a held "tsss" is an open hat
+      h.drum=d;}
   }
-  groups.forEach((g,gi)=>g.idx.forEach(i=>hits[i].drum=names[lab[gi]]));
-  if(K===3)for(const h of hits)if(h.drum==='hat'&&h.dur>0.16)h.drum='ohat'; // a held "tsss" is an open hat
   return vel();
 }
 
@@ -571,7 +562,7 @@ function analyse(m){
   if(m.mode==='melodic')return {events:detectNotes(m.x,m.sr,m.sens,m.noise)};
   if(m.mode==='audio'){const t=firstSound(m.x,m.sr);return {events:t<0?[]:[{t}]};}
   const hits=labelDrums(detectHits(m.x,m.sr,m.sens),m.mode,m.known);
-  return {events:hits.map(h=>({t:h.t,d:h.dur,drum:h.drum,v:h.v,f:h.f}))};
+  return {events:hits.map(h=>({t:h.t,d:h.dur,drum:h.drum,v:h.v,f:h.f,lo:h.lo,hi:h.hi}))};
 }
 
 /* Delay between scheduled clicks and where they show up in the recording (latency calibration) */
@@ -744,7 +735,7 @@ function snapshot(withAudio){
 }
 function restore(o){
   for(const k of ['bpm','bars','grid','scale','keyRoot','click','listen','firstTake','latencyMs','sens','duck'])if(o[k]!==undefined)S[k]=o[k];
-  if(Array.isArray(o.learned))S.learned=o.learned.slice(-60);
+  if(Array.isArray(o.learned))S.learned=o.learned.filter(l=>l&&l.lo!=null).slice(-60); // corrections from before the energy measures are dropped
   S.tracks.forEach(dropTrackNodes);S.tracks=[];
   for(const t of o.tracks||[]){
     if(t.inst==='kicksnare'||t.inst==='hat')t.inst='kit'; // older projects: all drums are one instrument now
@@ -758,7 +749,7 @@ function restore(o){
   }
   S.sel=null;
 }
-let saveTimer=0;
+let saveTimer=0,lastRaw=null;
 /* voice recordings are too big for localStorage: they live in IndexedDB, one entry per track */
 const AUDIO_DB=(()=>{let p=null;
   const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('melodeas',1);r.onupgradeneeded=()=>r.result.createObjectStore('audio');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));
@@ -814,7 +805,7 @@ function commitTake(tr,c){
 function makePeaks(d){const n=400,p=new Float32Array(n),step=d.length/n;for(let i=0;i<n;i++){let m=0;for(let j=Math.floor(i*step);j<Math.floor((i+1)*step);j++){const a=Math.abs(d[j]);if(a>m)m=a;}p[i]=m;}return p;}
 function learn(tr,n){ // a corrected drum hit becomes a reference for the next takes
   if(n.f==null||INST[tr.inst].mode==='hat')return;
-  n.c=CLASS_OF[n.drum]||n.drum;S.learned.push({f:n.f,drum:n.c});if(S.learned.length>60)S.learned.shift();
+  n.c=CLASS_OF[n.drum]||n.drum;if(n.lo==null)return;S.learned.push({f:n.f,lo:n.lo,hi:n.hi,drum:n.c});if(S.learned.length>60)S.learned.shift();
 }
 
 function currentRoot(){
@@ -1239,7 +1230,7 @@ function cancelRec(msg){
 }
 function fade(d,sr){const n=Math.min(d.length>>1,Math.round(sr*0.006));for(let i=0;i<n;i++){const g=i/n;d[i]*=g;d[d.length-1-i]*=g;}}
 /* What the sorter may compare a new take against: hits already on this track and hits the user has corrected */
-function drumNote(tr,e,t,sp){const drum=(tr.map&&tr.map[e.drum])||e.drum,n={t,drum,c:e.drum,v:e.v,f:e.f};if(drum==='ohat')n.d=Math.max(0.25,e.d/sp);return n;}
+function drumNote(tr,e,t,sp){const drum=(tr.map&&tr.map[e.drum])||e.drum,n={t,drum,c:e.drum,v:e.v,f:e.f,lo:e.lo,hi:e.hi};if(drum==='ohat')n.d=Math.max(0.25,e.d/sp);return n;}
 function setRowSound(tr,from,to){ // every hit on one row becomes another sound; later takes follow
   if(from===to)return;keep(tr);const cls=new Map();
   for(const n of tr.notes)if(n.drum===from){n.drum=to;const c=n.c||CLASS_OF[from];cls.set(c,(cls.get(c)||0)+1);if(to==='ohat'&&!n.d)n.d=0.5;}
@@ -1247,12 +1238,12 @@ function setRowSound(tr,from,to){ // every hit on one row becomes another sound;
   for(const [c] of cls)tr.map[c]=to;
   if(tr.extra)tr.extra=tr.extra.filter(r=>r!==from);invalidate();save();renderTracks();
 }
-function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null).map(n=>({f:n.f,drum:n.c||CLASS_OF[n.drum]||n.drum})).concat(S.learned):null;}
+function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null&&n.lo!=null).map(n=>({f:n.f,lo:n.lo,hi:n.hi,drum:n.c||CLASS_OF[n.drum]||n.drum})).concat(S.learned):null;}
 const NOTHING='Didn’t catch anything. Get closer to the mic, or raise mic sensitivity in Settings.';
 async function finishRec(){
   const tr=R.track,I=INST[tr.inst],sr=ctx.sampleRate,pre=0.1,sp=60/R.bpm,len=R.lenBeats;
   const x=capSlice(R.tStart+R.lat-pre,R.tEnd+R.lat+0.06),noise=capSlice(R.tStart+R.lat-0.85,R.tStart+R.lat-0.15);capStop();R.state='analysing';
-  if(window.melodeas.debug)window.melodeas.lastX=x;
+  lastRaw={x,sr,kind:I.kind,name:INST[tr.inst].name};if(window.melodeas.debug)window.melodeas.lastX=x;
   try{
     if(I.kind==='audio'){
       const a=Math.round(pre*sr),data=x.slice(a,a+Math.round(len*sp*sr));let pk=0;for(let i=0;i<data.length;i++){const v=Math.abs(data[i]);if(v>pk)pk=v;}
@@ -1276,7 +1267,7 @@ async function finishFree(){
   const tStop=ctx.currentTime,tr=R.track,I=INST[tr.inst],sr=ctx.sampleRate;
   clearTimeout(R.timer);R.state='analysing';
   await sleep(130);
-  const x=capSlice(R.tStart,tStop+0.05);capStop();
+  const x=capSlice(R.tStart,tStop+0.05);capStop();lastRaw={x,sr,kind:I.kind,name:I.name};
   try{
     const res=await analyse({mode:I.kind==='drum'?I.mode:I.kind==='audio'?'audio':'melodic',x,sr,sens:S.sens,known:knownDrums(tr)});
     if(!res.events.length){setStatus(NOTHING,6000);endRec();return;}
@@ -1590,6 +1581,9 @@ function init(){
   const key=$('#key');key.append(h('option',{value:'auto',textContent:'Auto'}));NOTE_NAMES.forEach((n,i)=>key.append(h('option',{value:String(i),textContent:n})));
   wireBoard($('#board'));
   $('#plusBtn').onclick=openPicker;
+  $('#saveTake').onclick=()=>{if(!lastRaw){setStatus('Record a take first.',3000);return;}
+    download(DSP.encodeWav([lastRaw.x],lastRaw.sr),'melodeas-take-'+lastRaw.name.toLowerCase().replace(/\W+/g,'-')+'-'+stamp()+'.wav','audio/wav');setStatus('Last take saved as a WAV file.',3000);};
+  $('#forget').onclick=()=>{S.learned=[];save();setStatus('Drum corrections forgotten.',3000);};
   const pk=$('#pickList');for(const k of CHIPS)pk.append(h('button',{className:'pick',style:'--c:'+INST[k].color,onclick:()=>{$('#picker').close();if(R.state==='idle')addTrack(k);}},
     h('b',{},INST[k].chip||INST[k].name),h('small',{},PICK_NOTE[k]||'')));
   // leaving the app (home button, app switcher, closing the tab) stops the sound and the microphone

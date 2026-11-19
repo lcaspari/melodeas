@@ -276,6 +276,8 @@ dialog .icon{margin-right:-10px}
     <div class="srow"><span>Mic level</span><div><meter id="meter" min="0" max="1" low="0.02" high="0.7" optimum="0.3" value="0"></meter><button class="btn" id="micOn">Turn mic on</button></div></div>
     <label class="srow"><span>Mic sensitivity</span><select id="sens"><option value="0.6">Low (noisy room)</option><option value="1">Normal</option><option value="1.8">High (quiet voice)</option></select></label>
     <div class="srow"><span>Timing offset, ms</span><div><input type="number" id="lat" min="0" max="500" step="1" placeholder="auto"><button class="btn" id="latAuto">Auto</button><button class="btn" id="calib">Measure with speakers</button></div></div>
+    <div class="srow"><span>Drum corrections<small>Hits you dragged to another drum teach the sorting</small></span><div><button class="btn" id="forget">Forget them</button></div></div>
+    <div class="srow"><span>Last take<small>The raw recording, for checking what the mic heard</small></span><div><button class="btn" id="saveTake">Save as WAV</button></div></div>
     <p class="note" id="latNote">The timing offset is how long sound takes to leave the speakers and come back through the mic. If your notes land late or early against the click, measure it once: turn the speakers up and press “Measure with speakers”.</p>
   </div>
 </dialog>

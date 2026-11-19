@@ -101,11 +101,11 @@ function place(len,list){const x=new Float32Array(Math.round(len*sr));for(let i=
   const r=D.analyse({mode:'kicksnare',x,sr,sens:1}).events;
   check('only breathy "p" sounds -> all kick',r.length===4&&r.every(h=>h.drum==='kick'),r.map(h=>h.drum+'@'+Math.round(2**h.f)+'Hz').join(' '));
   // second take with only "k" sounds, given the kicks already on the track -> snare
-  const known=r.map(h=>({f:h.f,drum:'kick'}));
+  const known=r.map(h=>({f:h.f,lo:h.lo,hi:h.hi,drum:'kick'}));
   const r2=D.analyse({mode:'kicksnare',x:mix(2,[{t:0.3,k:'snare',a:0.5},{t:0.9,k:'snare',a:0.5},{t:1.4,k:'snare',a:0.4}]),sr,sens:1,known}).events;
   check('overdub of only "k" sounds next to known kicks -> snare',r2.length===3&&r2.every(h=>h.drum==='snare'),r2.map(h=>h.drum).join(' '));
   // the user corrected such a sound to snare once: the same sound alone is now snare
-  const r3=D.analyse({mode:'kicksnare',x,sr,sens:1,known:[{f:r[0].f,drum:'snare'}]}).events;
+  const r3=D.analyse({mode:'kicksnare',x,sr,sens:1,known:[{f:r[0].f,lo:r[0].lo,hi:r[0].hi,drum:'snare'}]}).events;
   check('a correction is remembered',r3.every(h=>h.drum==='snare'),r3.map(h=>h.drum).join(' '));
   const r4=D.analyse({mode:'kicksnare',x:mix(2,[{t:0.3,k:'hat',a:0.5},{t:0.9,k:'hat',a:0.5}]),sr,sens:1}).events;
   check('only clearly bright sounds on kick+snare -> snare',r4.length===2&&r4.every(h=>h.drum==='snare'),r4.map(h=>h.drum+'@'+Math.round(2**h.f)+'Hz').join(' '));

@@ -73,7 +73,7 @@ function snapshot(withAudio){
 }
 function restore(o){
   for(const k of ['bpm','bars','grid','scale','keyRoot','click','listen','firstTake','latencyMs','sens','duck'])if(o[k]!==undefined)S[k]=o[k];
-  if(Array.isArray(o.learned))S.learned=o.learned.slice(-60);
+  if(Array.isArray(o.learned))S.learned=o.learned.filter(l=>l&&l.lo!=null).slice(-60); // corrections from before the energy measures are dropped
   S.tracks.forEach(dropTrackNodes);S.tracks=[];
   for(const t of o.tracks||[]){
     if(t.inst==='kicksnare'||t.inst==='hat')t.inst='kit'; // older projects: all drums are one instrument now
@@ -87,7 +87,7 @@ function restore(o){
   }
   S.sel=null;
 }
-let saveTimer=0;
+let saveTimer=0,lastRaw=null;
 /* voice recordings are too big for localStorage: they live in IndexedDB, one entry per track */
 const AUDIO_DB=(()=>{let p=null;
   const open=()=>p||(p=new Promise((res,rej)=>{const r=indexedDB.open('melodeas',1);r.onupgradeneeded=()=>r.result.createObjectStore('audio');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);}));
@@ -143,7 +143,7 @@ function commitTake(tr,c){
 function makePeaks(d){const n=400,p=new Float32Array(n),step=d.length/n;for(let i=0;i<n;i++){let m=0;for(let j=Math.floor(i*step);j<Math.floor((i+1)*step);j++){const a=Math.abs(d[j]);if(a>m)m=a;}p[i]=m;}return p;}
 function learn(tr,n){ // a corrected drum hit becomes a reference for the next takes
   if(n.f==null||INST[tr.inst].mode==='hat')return;
-  n.c=CLASS_OF[n.drum]||n.drum;S.learned.push({f:n.f,drum:n.c});if(S.learned.length>60)S.learned.shift();
+  n.c=CLASS_OF[n.drum]||n.drum;if(n.lo==null)return;S.learned.push({f:n.f,lo:n.lo,hi:n.hi,drum:n.c});if(S.learned.length>60)S.learned.shift();
 }
 
 function currentRoot(){
@@ -568,7 +568,7 @@ function cancelRec(msg){
 }
 function fade(d,sr){const n=Math.min(d.length>>1,Math.round(sr*0.006));for(let i=0;i<n;i++){const g=i/n;d[i]*=g;d[d.length-1-i]*=g;}}
 /* What the sorter may compare a new take against: hits already on this track and hits the user has corrected */
-function drumNote(tr,e,t,sp){const drum=(tr.map&&tr.map[e.drum])||e.drum,n={t,drum,c:e.drum,v:e.v,f:e.f};if(drum==='ohat')n.d=Math.max(0.25,e.d/sp);return n;}
+function drumNote(tr,e,t,sp){const drum=(tr.map&&tr.map[e.drum])||e.drum,n={t,drum,c:e.drum,v:e.v,f:e.f,lo:e.lo,hi:e.hi};if(drum==='ohat')n.d=Math.max(0.25,e.d/sp);return n;}
 function setRowSound(tr,from,to){ // every hit on one row becomes another sound; later takes follow
   if(from===to)return;keep(tr);const cls=new Map();
   for(const n of tr.notes)if(n.drum===from){n.drum=to;const c=n.c||CLASS_OF[from];cls.set(c,(cls.get(c)||0)+1);if(to==='ohat'&&!n.d)n.d=0.5;}
@@ -576,12 +576,12 @@ function setRowSound(tr,from,to){ // every hit on one row becomes another sound;
   for(const [c] of cls)tr.map[c]=to;
   if(tr.extra)tr.extra=tr.extra.filter(r=>r!==from);invalidate();save();renderTracks();
 }
-function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null).map(n=>({f:n.f,drum:n.c||CLASS_OF[n.drum]||n.drum})).concat(S.learned):null;}
+function knownDrums(tr){return INST[tr.inst].kind==='drum'?tr.notes.filter(n=>n.f!=null&&n.lo!=null).map(n=>({f:n.f,lo:n.lo,hi:n.hi,drum:n.c||CLASS_OF[n.drum]||n.drum})).concat(S.learned):null;}
 const NOTHING='Didn’t catch anything. Get closer to the mic, or raise mic sensitivity in Settings.';
 async function finishRec(){
   const tr=R.track,I=INST[tr.inst],sr=ctx.sampleRate,pre=0.1,sp=60/R.bpm,len=R.lenBeats;
   const x=capSlice(R.tStart+R.lat-pre,R.tEnd+R.lat+0.06),noise=capSlice(R.tStart+R.lat-0.85,R.tStart+R.lat-0.15);capStop();R.state='analysing';
-  if(window.melodeas.debug)window.melodeas.lastX=x;
+  lastRaw={x,sr,kind:I.kind,name:INST[tr.inst].name};if(window.melodeas.debug)window.melodeas.lastX=x;
   try{
     if(I.kind==='audio'){
       const a=Math.round(pre*sr),data=x.slice(a,a+Math.round(len*sp*sr));let pk=0;for(let i=0;i<data.length;i++){const v=Math.abs(data[i]);if(v>pk)pk=v;}
@@ -605,7 +605,7 @@ async function finishFree(){
   const tStop=ctx.currentTime,tr=R.track,I=INST[tr.inst],sr=ctx.sampleRate;
   clearTimeout(R.timer);R.state='analysing';
   await sleep(130);
-  const x=capSlice(R.tStart,tStop+0.05);capStop();
+  const x=capSlice(R.tStart,tStop+0.05);capStop();lastRaw={x,sr,kind:I.kind,name:I.name};
   try{
     const res=await analyse({mode:I.kind==='drum'?I.mode:I.kind==='audio'?'audio':'melodic',x,sr,sens:S.sens,known:knownDrums(tr)});
     if(!res.events.length){setStatus(NOTHING,6000);endRec();return;}
@@ -919,6 +919,9 @@ function init(){
   const key=$('#key');key.append(h('option',{value:'auto',textContent:'Auto'}));NOTE_NAMES.forEach((n,i)=>key.append(h('option',{value:String(i),textContent:n})));
   wireBoard($('#board'));
   $('#plusBtn').onclick=openPicker;
+  $('#saveTake').onclick=()=>{if(!lastRaw){setStatus('Record a take first.',3000);return;}
+    download(DSP.encodeWav([lastRaw.x],lastRaw.sr),'melodeas-take-'+lastRaw.name.toLowerCase().replace(/\W+/g,'-')+'-'+stamp()+'.wav','audio/wav');setStatus('Last take saved as a WAV file.',3000);};
+  $('#forget').onclick=()=>{S.learned=[];save();setStatus('Drum corrections forgotten.',3000);};
   const pk=$('#pickList');for(const k of CHIPS)pk.append(h('button',{className:'pick',style:'--c:'+INST[k].color,onclick:()=>{$('#picker').close();if(R.state==='idle')addTrack(k);}},
     h('b',{},INST[k].chip||INST[k].name),h('small',{},PICK_NOTE[k]||'')));
   // leaving the app (home button, app switcher, closing the tab) stops the sound and the microphone
