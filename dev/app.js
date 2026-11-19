@@ -841,7 +841,7 @@ function renderTracks(){
       row3.append(s);
     }
     row3.append(
-      h('button',{className:'sm',textContent:'EQ','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this track',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
+      h('button',{className:'sm',textContent:'Effects','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this instrument',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
       h('button',{className:'sm',textContent:'Clear',title:'Empty this track',onclick:()=>{if(!hasContent(tr))return;keep(tr);tr.notes=[];tr.audio=null;tr.peaks=null;tr.buf=null;tr.lenBeats=0;invalidate();renderTracks();setStatus('Track cleared. “Undo last change” brings it back.',4000);}}));
     if(I.kind==='audio'&&tr.audio)row3.append(h('button',{className:'sm',textContent:'WAV',title:'Export this voice track',onclick:()=>download(DSP.encodeWav([tr.audio.data],tr.audio.sr),'melodeas-voice-'+stamp()+'.wav','audio/wav')}));
     row3.append(h('button',{className:'sm',textContent:'Delete',onclick:()=>removeTrack(tr)}));

@@ -88,7 +88,7 @@ meter{width:120px;height:12px}
 .bar{border-top:1px solid var(--line)}
 .chips{display:flex;align-items:center;gap:8px;overflow-x:auto;padding-top:10px;padding-bottom:10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.appbar .barin{height:auto;justify-content:flex-start;gap:8px}
+.appbar .barin{height:auto;min-height:57px;justify-content:flex-start;gap:8px}
 .barin .chips{flex:1;min-width:0}
 .chips::after{content:"";flex:none;width:4px}
 .chip{position:relative;flex:none;height:36px;border-radius:18px;border:2px solid var(--c);background:var(--c);color:#1C1C1C;padding:0 14px;font-size:14px;font-weight:700;white-space:nowrap;
@@ -1485,7 +1485,7 @@ function renderTracks(){
       row3.append(s);
     }
     row3.append(
-      h('button',{className:'sm',textContent:'EQ','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this track',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
+      h('button',{className:'sm',textContent:'Effects','aria-pressed':String(tr.eqOpen),title:'Low cut, high cut and reverb for this instrument',onclick:()=>{tr.eqOpen=!tr.eqOpen;renderTracks();}}),
       h('button',{className:'sm',textContent:'Clear',title:'Empty this track',onclick:()=>{if(!hasContent(tr))return;keep(tr);tr.notes=[];tr.audio=null;tr.peaks=null;tr.buf=null;tr.lenBeats=0;invalidate();renderTracks();setStatus('Track cleared. “Undo last change” brings it back.',4000);}}));
     if(I.kind==='audio'&&tr.audio)row3.append(h('button',{className:'sm',textContent:'WAV',title:'Export this voice track',onclick:()=>download(DSP.encodeWav([tr.audio.data],tr.audio.sr),'melodeas-voice-'+stamp()+'.wav','audio/wav')}));
     row3.append(h('button',{className:'sm',textContent:'Delete',onclick:()=>removeTrack(tr)}));
