@@ -15,7 +15,7 @@ const mel=(name,group,color,program,eq,rev,dly,extra)=>Object.assign({name,kind:
 const INST={
   kicksnare:{name:'Kick + snare',kind:'drum',mode:'kicksnare',color:'#FFB648',eq:[30,16000],rev:0,hint:'Beatbox it: “p” or “b” for kick, “k” for snare.'},
   hat:{name:'Hi-hat',kind:'drum',mode:'hat',color:'#6FE3CB',eq:[450,20000],rev:0,hint:'Go “ts ts ts”. Hold a long “tsss” for an open hat.'},
-  kit:{name:'Full kit',kind:'drum',mode:'kit',color:'#FF8E6B',eq:[30,20000],rev:0,hint:'“p” for kick, “k” for snare and “ts” for hat, all in one take.'},
+  kit:{name:'Drums',chip:'Drums',kind:'drum',mode:'kit',color:'#FFB648',eq:[30,20000],rev:0,hint:'Beatbox it: “p” or “b” for kick, “k” for snare, “ts” for hat, a long “tsss” for an open hat. It sorts them out by itself.'},
   bass:mel('Synth bass','Bass','#6EA8FF',38,[35,5000],0,0,{chip:'Bass'}),
   sub:mel('Sub bass','Bass','#6EA8FF',39,[25,1500],0),
   bass808:mel('808 bass','Bass','#6EA8FF',38,[25,4000],0),
@@ -37,10 +37,10 @@ const INST={
   voice:{name:'Voice',kind:'audio',color:'#FF8FB1',eq:[90,20000],rev:0.12,hint:'Records your voice as it is.'}
 };
 for(const k of ['sub','bass','reese','synth1','sqlead','organ','pad','strings','brass','trumpet'])INST[k].env=true; // long notes follow the loudness curve of the voice
-const CHIPS=['kicksnare','hat','kit','toms','bass','synth1','synth2','epiano','pad','brass','voice'];
+const CHIPS=['kit','toms','bass','synth1','synth2','epiano','pad','brass','voice'];
 const KIT_NAMES={punch:'Punchy kit','808':'808 kit',boom:'Boom bap kit',trap:'Trap kit'};
 const DRUM_NOTE={kick:36,snare:38,hat:42,ohat:46};
-const DRUM_ROWS={kit:['hat','snare','kick'],hat:['ohat','hat'],kicksnare:['snare','kick']};
+const DRUM_ROWS={kit:['ohat','hat','snare','kick'],hat:['ohat','hat'],kicksnare:['snare','kick']};
 const DRUM_NEXT={kicksnare:{kick:'snare',snare:'kick'},kit:{kick:'snare',snare:'hat',hat:'kick'},hat:{hat:'ohat',ohat:'hat'}};
 const NOTE_NAMES=['C','C♯','D','E♭','E','F','F♯','G','A♭','A','B♭','B'];
 
@@ -60,7 +60,7 @@ function setStatus(msg,hold){st(msg);statusLock=hold?performance.now()+hold:0;}
 function idleStatus(){
   if(performance.now()<statusLock)return;
   const tr=selTrack();
-  st(tr?INST[tr.inst].hint+(hasContent(tr)?' Recording again adds to this take.':''):(S.tracks.length?'Tap an instrument at the top to record or edit it.':'Pick an instrument at the top to start.'));
+  st(tr?INST[tr.inst].hint+(hasContent(tr)?' Recording again adds to this take.':''):(S.tracks.length?'Tap an instrument at the top to record into it or edit it. Tap + to add one.':'Tap + at the top to add an instrument.'));
 }
 
 /* ---------- persistence ---------- */
@@ -74,6 +74,7 @@ function restore(o){
   if(Array.isArray(o.learned))S.learned=o.learned.slice(-60);
   S.tracks.forEach(dropTrackNodes);S.tracks=[];
   for(const t of o.tracks||[]){
+    if(t.inst==='kicksnare'||t.inst==='hat')t.inst='kit'; // older projects: all drums are one instrument now
     if(!INST[t.inst])continue;
     const tr=newTrack(t.inst);Object.assign(tr,{vol:t.vol??0.8,mute:!!t.mute,dyn:t.dyn!==false,octave:t.octave||0,lenBeats:t.lenBeats||0,notes:t.notes||[]});
     if(t.kit&&KIT_NAMES[t.kit])tr.kit=t.kit;if(t.eq&&t.eq.hp!=null)tr.eq={hp:+t.eq.hp,lp:+t.eq.lp};if(t.rev!=null)tr.rev=+t.rev;
@@ -139,7 +140,7 @@ function playEvents(tr){
   const I=INST[tr.inst],len=tr.lenBeats,root=currentRoot();let out=[];
   for(const n of tr.notes){
     let b=DSP.quantize(n.t,S.grid);if(b>=len-1e-6)b-=len;if(b<0)b=0;
-    if(I.kind==='drum')out.push({b,d:0.25,drum:n.drum,n:DRUM_NOTE[n.drum],v:n.v,src:n});
+    if(I.kind==='drum')out.push({b,d:n.drum==='ohat'?(n.d||0.5):0.25,drum:n.drum,n:DRUM_NOTE[n.drum],v:n.v,src:n});
     else out.push({b,d:n.d,n:clamp(DSP.snapPitch(n.p,root,S.scale)+12*tr.octave,0,127),v:n.v,env:tr.dyn!==false&&I.env?n.env:null,src:n});
   }
   out.sort((a,b)=>a.b-b.b||a.n-b.n);
@@ -208,10 +209,12 @@ function noiseHit(c,dest,t,o){
   const s=c.createBufferSource(),g=c.createGain();s.buffer=noise(c);let node=s;
   const filt=(type,fr,q)=>{const f=c.createBiquadFilter();f.type=type;f.frequency.value=fr;if(q)f.Q.value=q;node.connect(f);node=f;};
   if(o.hp)filt('highpass',o.hp);if(o.bp)filt('bandpass',o.bp,o.q||1);if(o.lp)filt('lowpass',o.lp);
-  g.gain.setValueAtTime(Math.max(o.gain,0.001),t);g.gain.exponentialRampToValueAtTime(0.0008,t+o.dec);
-  node.connect(g).connect(dest);s.start(t,Math.random()*0.5);s.stop(t+o.dec+0.02);
+  const hold=o.hold||0;g.gain.setValueAtTime(Math.max(o.gain,0.001),t);
+  if(hold>0){s.loop=true;g.gain.exponentialRampToValueAtTime(Math.max(o.gain*0.4,0.001),t+hold);} // a held sound: rings on, then dies away
+  g.gain.exponentialRampToValueAtTime(0.0008,t+hold+o.dec);
+  node.connect(g).connect(dest);s.start(t,Math.random()*0.5);s.stop(t+hold+o.dec+0.02);
 }
-function playDrum(c,dest,t,type,vel,kitId){
+function playDrum(c,dest,t,type,vel,kitId,len){
   const K=KITS[kitId]||KITS.punch;let v=Math.pow(vel/127,1.3);
   if(type==='kick'){
     const p=K.kick,o=c.createOscillator(),g=c.createGain(),s=sat(c,p.drive),og=c.createGain();
@@ -229,13 +232,13 @@ function playDrum(c,dest,t,type,vel,kitId){
     else noiseHit(c,dest,t,{hp:p.nHP,lp:p.lp,dec:p.nDec,gain:v*p.nGain});
     return;
   }
-  const p=K.hat,dec=type==='ohat'?p.odec:p.dec;
+  const p=K.hat,hold=type==='ohat'&&len>0?Math.max(0,len-0.08):0,dec=type==='ohat'?(hold?p.odec*0.6:p.odec):p.dec;
   if(p.metal){ // six detuned square waves, the classic drum-machine cymbal
     const g=c.createGain(),bp=c.createBiquadFilter(),hp=c.createBiquadFilter();bp.type='bandpass';bp.frequency.value=10000;bp.Q.value=0.6;hp.type='highpass';hp.frequency.value=p.hp;
-    g.gain.setValueAtTime(Math.max(v*p.gain,0.001),t);g.gain.exponentialRampToValueAtTime(0.0008,t+dec);
-    for(const fr of [205.3,304.4,369.6,522.7,540,800]){const o=c.createOscillator();o.type='square';o.frequency.value=fr*1.48;o.connect(bp);o.start(t);o.stop(t+dec+0.02);}
+    g.gain.setValueAtTime(Math.max(v*p.gain,0.001),t);if(hold)g.gain.exponentialRampToValueAtTime(Math.max(v*p.gain*0.4,0.001),t+hold);g.gain.exponentialRampToValueAtTime(0.0008,t+hold+dec);
+    for(const fr of [205.3,304.4,369.6,522.7,540,800]){const o=c.createOscillator();o.type='square';o.frequency.value=fr*1.48;o.connect(bp);o.start(t);o.stop(t+hold+dec+0.02);}
     bp.connect(hp).connect(g).connect(dest);
-  }else noiseHit(c,dest,t,{hp:p.hp,lp:p.lp,dec,gain:v*p.gain});
+  }else noiseHit(c,dest,t,{hp:p.hp,lp:p.lp,dec,hold,gain:v*p.gain});
 }
 
 /* ---------- sound: melodic instruments ---------- */
@@ -320,7 +323,7 @@ function preview(tr,again){ // play a few notes of a sound when it is picked
 function audition(tr,n){
   if(!ctx||ctx.state!=='running'||T.playing||R.state!=='idle')return;
   const t=ctx.currentTime+0.02;
-  if(n.drum)playDrum(ctx,trackOut(tr),t,n.drum,n.v,tr.kit);
+  if(n.drum)playDrum(ctx,trackOut(tr),t,n.drum,n.v,tr.kit,n.drum==='ohat'?(n.d||0.5)*spb():0);
   else playNote(ctx,trackOut(tr),tr.inst,t,clamp(DSP.snapPitch(n.p,currentRoot(),S.scale)+12*tr.octave,0,127),n.v,0.25);
 }
 /* ---------- audio setup, microphone, capture ---------- */
@@ -430,7 +433,7 @@ function scheduleRange(b0,b1){
       if(x.tr.useBuf)continue;
       const ab=base+x.b;if(ab<b0||ab>=b1)continue;
       const t=T.t0+ab*sp;if(!audible(x.tr,anySolo,t))continue;
-      if(x.e.drum)playDrum(ctx,trackOut(x.tr),t,x.e.drum,x.e.v,x.tr.kit);else playNote(ctx,trackOut(x.tr),x.tr.inst,t,x.e.n,x.e.v,x.e.d*sp,x.e.env);
+      if(x.e.drum)playDrum(ctx,trackOut(x.tr),t,x.e.drum,x.e.v,x.tr.kit,x.e.d*sp);else playNote(ctx,trackOut(x.tr),x.tr.inst,t,x.e.n,x.e.v,x.e.d*sp,x.e.env);
     }
     for(const tr of S.tracks){
       if(!tr.audio||!tr.lenBeats)continue;
@@ -445,7 +448,7 @@ const FZ_TAIL=3,FZ_LEAD=0.02;let fzChain=Promise.resolve();
 function stopSrc(s){try{if(s._g){const n=ctx.currentTime;s._g.gain.cancelScheduledValues(n);s._g.gain.setTargetAtTime(0,n,0.008);s.stop(n+0.05);}else s.stop();}catch(e){}}
 function freezeKey(tr){
   const ev=playEvents(tr),head=[tr.inst,tr.kit,S.bpm,S.bars,tr.lenBeats,ctx.sampleRate].join('|');
-  if(tr.fkEv!==ev||tr.fkHead!==head){tr.fkEv=ev;tr.fkHead=head;tr.fk=head+'|'+ev.map(e=>e.b+','+e.d+','+e.n+','+e.v+(e.env?','+e.env.join('/'):'')).join(';');}
+  if(tr.fkEv!==ev||tr.fkHead!==head){tr.fkEv=ev;tr.fkHead=head;tr.fk=head+'|'+ev.map(e=>e.b+','+e.d+','+e.n+','+(e.drum||'')+','+e.v+(e.env?','+e.env.join('/'):'')).join(';');}
   return tr.fk;
 }
 function ensureFrozen(tr){ // the rendered loop if it is current; otherwise null, and a render is on its way
@@ -463,7 +466,7 @@ async function renderFrozen(tr){
   const sp=spb(),LB=loopBeats(),sr=ctx.sampleRate,off=new OfflineAudioContext(2,Math.ceil((LB*sp+FZ_TAIL+FZ_LEAD)*sr),sr);
   const evs=playEvents(tr),tiles=Math.ceil(LB/tr.lenBeats-1e-9);
   for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9)continue;const t=FZ_LEAD+b*sp;
-    if(e.drum)playDrum(off,off.destination,t,e.drum,e.v,tr.kit);else playNote(off,off.destination,tr.inst,t,e.n,e.v,e.d*sp,e.env);}
+    if(e.drum)playDrum(off,off.destination,t,e.drum,e.v,tr.kit,e.d*sp);else playNote(off,off.destination,tr.inst,t,e.n,e.v,e.d*sp,e.env);}
   const buf=await off.startRendering();
   if(S.tracks.includes(tr)&&freezeKey(tr)===key)tr.frozen={key,buf};
 }
@@ -501,7 +504,7 @@ async function recPress(){
   if(R.state==='analysing')return;
   if(R.state!=='idle'){cancelRec('Recording cancelled.');return;}
   const tr=selTrack();
-  if(!tr){setStatus('Pick an instrument at the top first.',4000);const a=$('#add');a.classList.remove('nudge');void a.offsetWidth;a.classList.add('nudge');return;}
+  if(!tr){if(!S.tracks.length){openPicker();return;}setStatus('Select an instrument at the top first.',4000);const a=$('#add');a.classList.remove('nudge');void a.offsetWidth;a.classList.add('nudge');return;}
   try{await ensureAudio();await ensureMic();}catch(e){setStatus(micError(e),8000);return;}
   if(R.state!=='idle')return;
   R.track=tr;R.lat=latency();capStart();
@@ -545,7 +548,7 @@ async function finishRec(){
       const notes=[],had=tr.lenBeats>0?tr.notes.length:0;
       for(const e of res.events){
         let t=(e.t-pre)/sp;if(t<-pre/sp||t>=len)continue;
-        if(I.kind==='drum')notes.push({t:Math.max(0,t),drum:e.drum,v:e.v,f:e.f});
+        if(I.kind==='drum')notes.push(e.drum==='ohat'?{t:Math.max(0,t),drum:e.drum,v:e.v,f:e.f,d:Math.max(0.25,e.d/sp)}:{t:Math.max(0,t),drum:e.drum,v:e.v,f:e.f});
         else{let d=e.d/sp;if(t<0){d+=t;t=0;}if(d>0.05)notes.push(e.env?{t,d,p:e.p,v:e.v,env:e.env}:{t,d,p:e.p,v:e.v});}
       }
       if(!notes.length)setStatus(NOTHING,6000);
@@ -571,7 +574,7 @@ async function finishFree(){
       commitTake(tr,{audio:{data,sr,bpm:tm.bpm},lenBeats:len});}
     else{const notes=[];
       for(const e of res.events){const t=(e.t-first)/sp;if(t<0||t>=len)continue;
-        notes.push(I.kind==='drum'?{t,drum:e.drum,v:e.v,f:e.f}:{t,d:e.d/sp,p:e.p,v:e.v});}
+        notes.push(I.kind==='drum'?(e.drum==='ohat'?{t,drum:e.drum,v:e.v,f:e.f,d:Math.max(0.25,e.d/sp)}:{t,drum:e.drum,v:e.v,f:e.f}):{t,d:e.d/sp,p:e.p,v:e.v});}
       commitTake(tr,{notes,lenBeats:len});}
     startTransport(tStop,ctx.currentTime);kickAudio(tr);
     setStatus('Loop set: '+tm.bars+(tm.bars===1?' bar':' bars')+' at '+S.bpm+' bpm. Everything you add now follows it.',6000);
@@ -619,7 +622,7 @@ async function renderMix(){ // the loop once through, with the same instruments,
   const outOf=tr=>{if(!outs.has(tr))outs.set(tr,makeChain(off,tr,bus,f).in);return outs.get(tr);};
   const on=tr=>!tr.mute&&(!anySolo||tr.solo);
   for(const x of loopEvents()){if(!on(x.tr))continue;const t=0.02+x.b*sp;
-    if(x.e.drum)playDrum(off,outOf(x.tr),t,x.e.drum,x.e.v,x.tr.kit);else playNote(off,outOf(x.tr),x.tr.inst,t,x.e.n,x.e.v,x.e.d*sp,x.e.env);}
+    if(x.e.drum)playDrum(off,outOf(x.tr),t,x.e.drum,x.e.v,x.tr.kit,x.e.d*sp);else playNote(off,outOf(x.tr),x.tr.inst,t,x.e.n,x.e.v,x.e.d*sp,x.e.env);}
   for(const tr of S.tracks){if(!tr.audio||!tr.lenBeats||!on(tr))continue;
     const b=off.createBuffer(1,tr.audio.data.length,tr.audio.sr);b.getChannelData(0).set(tr.audio.data);
     for(let j=0;j*tr.lenBeats<LB-1e-9;j++){const s=off.createBufferSource();s.buffer=b;s.playbackRate.value=S.bpm/tr.audio.bpm;s.connect(outOf(tr));
@@ -682,9 +685,9 @@ function drawBoard(pos,LB){
   for(let b=Math.ceil(b0-1e-9);b<=LB;b++){const x=Math.round(X(b))+0.5;if(x>w+1)break;g.strokeStyle=b%4===0?'rgba(168,168,168,.5)':'rgba(168,168,168,.16)';g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke();}
   if(B.zoom>1.01){g.fillStyle='rgba(168,168,168,.7)';for(let b=Math.ceil(b0/4)*4;b<LB;b+=4){const x=X(b);if(x>w)break;g.fillText('bar '+(b/4+1),x+4,11);}}
   g.strokeStyle='rgba(168,168,168,.5)';for(const y of [A&&(M||D)?A.h:0,D&&(M||A)?D.y0:0])if(y){g.beginPath();g.moveTo(0,Math.round(y)+0.5);g.lineTo(w,Math.round(y)+0.5);g.stroke();}
-  const order=S.tracks.filter(t=>t!==cur);if(cur)order.push(cur);
+  const anySoloB=S.tracks.some(t=>t.solo),order=S.tracks.filter(t=>t!==cur);if(cur)order.push(cur);
   for(const tr of order){
-    const I=INST[tr.inst],off0=!cur&&tr.mute,front=(!cur||tr===cur)&&!off0,dim=front?1:off0?0.22:0.38;tr.cv=c;tr.rects=[];g.fillStyle=front?I.color:GREY;
+    const I=INST[tr.inst],off0=!cur&&(tr.mute||(anySoloB&&!tr.solo)),front=(!cur||tr===cur)&&!off0,dim=front?1:off0?0.22:0.38;tr.cv=c;tr.rects=[];g.fillStyle=front?I.color:GREY;
     const evs=tr.lenBeats>0&&I.kind!=='audio'?playEvents(tr):[],tiles=tr.lenBeats>0?Math.ceil(LB/tr.lenBeats-1e-9):0;
     if(I.kind==='audio'){tr.geom={w:W,LB,b0,y0:A.y0,hh:A.y0+A.h};
       if(tr.peaks)for(let j=0;j<tiles;j++){const x0=X(j*tr.lenBeats),tw=tr.lenBeats*pxb,n=tr.peaks.length;g.globalAlpha=(j?0.5:0.95)*dim;
@@ -692,8 +695,8 @@ function drawBoard(pos,LB){
     }else if(I.kind==='drum'){
       const G=tr.geom={w:W,LB,b0,y0:D.y0,hh:D.y0+D.h,rh:D.rh,rows:D.rows,allowed:DRUM_ROWS[I.mode]},bw=clamp(pxb*0.2,6,36),bh=Math.min(G.rh*0.6,34);
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9)continue;
-        const x=X(b),y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?bw*2.2:bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
-        g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n});}
+        const x=X(b),y=G.y0+G.rows.indexOf(e.drum)*G.rh+(G.rh-bh)/2,ww=e.drum==='ohat'?Math.max(bw,e.d*pxb-1.5):bw;g.globalAlpha=(0.35+0.65*e.v/127)*(j?0.55:1)*dim;
+        g.fillRect(x,y,ww,bh);tr.rects.push({x:x-5,y:y-5,w:ww+10,h:bh+10,src:e.src,n:e.n,rs:e.drum==='ohat'});}
     }else{
       const off=tr.dOff||0,G=tr.geom={w:W,LB,b0,y0:M.y0,hh:M.y0+M.h,rh:M.rh,lo:M.lo-off,hi:M.hi-off};
       for(let j=0;j<tiles;j++)for(const e of evs){const b=j*tr.lenBeats+e.b;if(b>=LB-1e-9||e.n<G.lo||e.n>G.hi)continue;
@@ -710,13 +713,13 @@ function drawBoard(pos,LB){
 /* ---------- editing notes of the selected track ---------- */
 function laneXY(tr,e){const r=B.cv.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
 function laneHit(tr,e){const [x,y]=laneXY(tr,e);
-  for(let i=tr.rects.length-1;i>=0;i--){const q=tr.rects[i];if(x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h)return {src:q.src,n:q.n,edge:!!q.mel&&q.w>20&&x>q.x+q.w-9};}
+  for(let i=tr.rects.length-1;i>=0;i--){const q=tr.rects[i];if(x>=q.x&&x<=q.x+q.w&&y>=q.y&&y<=q.y+q.h)return {src:q.src,n:q.n,edge:!!(q.mel||q.rs)&&q.w>20&&x>q.x+q.w-9};}
   return null;}
 function drumAt(G,y){ // the drum row under the pointer, kept to the drums this track can play
   const i=clamp(Math.floor((y-G.y0)/G.rh),0,G.rows.length-1);let best=null,bd=99;
   for(const r of G.allowed){const d=Math.abs(G.rows.indexOf(r)-i);if(d<bd){bd=d;best=r;}}return best;}
 function selectTrack(tr){ // null, or the track that is already selected, goes back to the view of everything
-  if(R.state!=='idle')return;S.sel=tr&&S.sel!==tr.id?tr.id:null;pruneEmpty();invalidate();statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
+  if(R.state!=='idle')return;S.sel=tr?tr.id:null;pruneEmpty();invalidate();statusLock=0;if(tr)tr.dragged=performance.now();renderTracks();}
 function addNoteAt(tr,e){
   const [x,y]=laneXY(tr,e),G=tr.geom,I=INST[tr.inst];if(!G||y<G.y0||y>G.hh)return;
   keep(tr);if(!tr.lenBeats)tr.lenBeats=G.LB;
@@ -737,7 +740,7 @@ function wireBoard(cv){
       pinch={d0:Math.max(20,Math.abs(a.x-b.x)),z0:B.zoom,beat:B.b0+mx/r.width*loopBeats()/B.zoom};return;}
     if(pts.size>2)return;
     const tr=selTrack(),q=tr&&INST[tr.inst].kind!=='audio'?laneHit(tr,e):null;
-    if(q){drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
+    if(q){drag={tr,n:q.src,x0:e.clientX,y0:e.clientY,t0:q.src.t,d0:q.src.d??0.5,p0:q.n,drum0:q.src.drum,resize:q.edge,moved:false};
       if(INST[tr.inst].kind==='melodic')B.dragRange={lo:tr.geom.lo+(tr.dOff||0),hi:tr.geom.hi+(tr.dOff||0)};}
     else pan={x0:e.clientX,b0:B.b0,moved:false}; // dragging the empty board scrolls it
   });
@@ -771,8 +774,6 @@ function wireBoard(cv){
   cv.addEventListener('click',e=>{
     if(quiet())return;const tr=selTrack();
     if(!tr){for(let i=S.tracks.length-1;i>=0;i--)if(S.tracks[i].rects&&laneHit(S.tracks[i],e)){selectTrack(S.tracks[i]);break;}return;} // in the overview, a tap on a note picks its instrument
-    if(performance.now()-tr.dragged<350)return;const I=INST[tr.inst];
-    const q=laneHit(tr,e);if(q&&q.src.drum){keep(tr);const n=q.src;n.drum=DRUM_NEXT[I.mode][n.drum]||n.drum;learn(tr,n);invalidate();audition(tr,n);}
   });
   cv.addEventListener('dblclick',e=>{
     const tr=selTrack();if(quiet()||!tr||INST[tr.inst].kind==='audio')return;
@@ -781,6 +782,7 @@ function wireBoard(cv){
 }
 
 /* ---------- instrument bar and the panel of the selected track ---------- */
+const PICK_NOTE={kit:'Kick, snare, hi-hat, open hat',toms:'Pitched drum hits',bass:'Synth, sub, 808, Reese, acid',synth1:'Supersaw, square lead',synth2:'Pluck, FM bell',epiano:'Electric piano, piano, lo-fi, organ',pad:'Warm pad, strings',brass:'Synth brass, trumpet',voice:'Your voice as audio'};
 const FAMILY={bass:['bass','sub','bass808','reese','acid'],synth1:['synth1','sqlead'],synth2:['synth2','bell'],epiano:['epiano','piano','lofi','organ'],pad:['pad','strings'],brass:['brass','trumpet']};
 const chipOf=tr=>{for(const k in FAMILY)if(FAMILY[k].includes(tr.inst))return k;return tr.inst;};
 const hpFromX=x=>x<=0.001?0:Math.round(20*Math.pow(50,x)),xFromHp=v=>v<=20?0:Math.log(v/20)/Math.log(50);
@@ -797,30 +799,33 @@ function eqPanel(tr){
     h('span',{},'Reverb'),sl('Reverb',tr.rev,x=>tr.rev=Math.round(x*100)/100),oRv,
     h('button',{className:'sm',textContent:'Back to the '+INST[tr.inst].name.toLowerCase()+' default',onclick:()=>{mixDefaults(tr);applyMix(tr);save();renderTracks();}}));
 }
-function chipPress(k,tr){if(R.state!=='idle')return;if(tr)selectTrack(tr);else addTrack(k);}
+function chipLabel(tr){const k=chipOf(tr),same=S.tracks.filter(t=>chipOf(t)===k),base=INST[k].chip||INST[k].name;return same.length>1?base+' '+(same.indexOf(tr)+1):base;}
+function wireChip(b,tr){ // tap: select, or mute the selected one; hold (or right-click): solo
+  let timer=0,held=false;
+  const solo=()=>{held=true;tr.solo=!tr.solo;renderTracks();setStatus(tr.solo?chipLabel(tr)+' solo.':'Solo off.',2500);};
+  b.addEventListener('pointerdown',()=>{held=false;clearTimeout(timer);timer=setTimeout(solo,450);});
+  for(const ev of ['pointerup','pointerleave','pointercancel'])b.addEventListener(ev,()=>clearTimeout(timer));
+  b.addEventListener('contextmenu',e=>{e.preventDefault();if(!held){clearTimeout(timer);solo();}});
+  b.onclick=e=>{clearTimeout(timer);if(held){held=false;return;}
+    if(e.shiftKey){solo();held=false;return;}
+    if(selTrack()===tr){tr.mute=!tr.mute;save();renderTracks();setStatus(tr.mute?chipLabel(tr)+' muted. Tap it again to hear it.':chipLabel(tr)+' back on.',2500);}
+    else selectTrack(tr);};
+}
+function openPicker(){if(R.state!=='idle')return;$('#picker').showModal();}
 function renderTracks(){
-  const bar=$('#chips'),cur=selTrack();bar.textContent='';
-  for(const k of CHIPS){
-    const own=S.tracks.filter(t=>chipOf(t)===k);
-    for(const tr of own.length?own:[null]){const on=tr&&tr===cur;
-      bar.append(h('button',{className:'chip'+(tr?' has':'')+(on?' on':''),style:'--c:'+INST[k].color,textContent:INST[k].chip||INST[k].name,'aria-pressed':String(!!on),
-        title:tr?(on?'Show all instruments':'Bring this instrument to the front'):'Add this instrument',onclick:()=>chipPress(k,tr)}));}
-  }
+  const bar=$('#chips'),cur=selTrack(),anySolo=S.tracks.some(t=>t.solo);bar.textContent='';
+  if(S.tracks.length)bar.append(h('button',{className:'chip all','aria-pressed':String(!cur),title:'Show all instruments',textContent:'All',onclick:()=>selectTrack(null)}));
+  for(const tr of S.tracks){const k=chipOf(tr),on=tr===cur;
+    const b=h('button',{className:'chip has'+(on?' on':'')+(tr.mute?' muted':'')+(tr.solo?' solo':'')+(anySolo&&!tr.solo?' quiet':''),style:'--c:'+INST[k].color,
+      'aria-pressed':String(on),title:on?'Tap to mute or unmute. Hold to solo.':'Tap to bring it to the front. Hold to solo.'},chipLabel(tr));
+    if(tr.solo)b.append(h('span',{className:'badge'},'S'));
+    wireChip(b,tr);bar.append(b);}
   const on=bar.querySelector('.on');if(on&&on.scrollIntoView)try{on.scrollIntoView({block:'nearest',inline:'nearest'});}catch(e){}
   $('#empty').classList.toggle('hide',S.tracks.length>0);$('#boardBox').classList.toggle('hide',!S.tracks.length);
-  const box=$('#panel');box.textContent='';box.classList.toggle('hide',!S.tracks.length);box.classList.toggle('mix',!cur);
-  if(!cur&&S.tracks.length){ // nothing selected: a small mixer, tap an instrument to mute it
-    const row=h('div',{className:'row'},h('span',{className:'mixl'},'Tap to mute'));
-    for(const tr of S.tracks){const I=INST[tr.inst];
-      row.append(h('button',{className:'mixb',style:'--c:'+I.color,textContent:I.name,'aria-pressed':String(!tr.mute),title:tr.mute?'Muted. Tap to hear it again':'Playing. Tap to mute',
-        onclick:e=>{tr.mute=!tr.mute;e.target.setAttribute('aria-pressed',String(!tr.mute));save();}}));}
-    box.append(row);
-  }
+  const box=$('#panel');box.textContent='';box.classList.toggle('hide',!cur);
   if(cur){
     const tr=cur,I=INST[tr.inst];box.style.setProperty('--c',I.color);
-    box.append(h('div',{className:'row'},h('div',{className:'tn'},I.name,h('small',{},'Next take goes here')),
-      h('button',{className:'sm',textContent:'Mute','aria-pressed':String(tr.mute),onclick:e=>{tr.mute=!tr.mute;e.target.setAttribute('aria-pressed',tr.mute);save();}}),
-      h('button',{className:'sm',textContent:'Solo','aria-pressed':String(tr.solo),onclick:e=>{tr.solo=!tr.solo;e.target.setAttribute('aria-pressed',tr.solo);}}),
+    box.append(h('div',{className:'row'},h('div',{className:'tn'},chipLabel(tr),h('small',{},tr.mute?'Muted. Tap its name at the top to unmute.':tr.solo?'Solo. Hold its name at the top to end it.':'Next take goes here')),
       h('input',{type:'range',min:0,max:1,step:0.01,value:tr.vol,'aria-label':'Volume',oninput:e=>{tr.vol=+e.target.value;applyMix(tr);save();}})));
     const row3=h('div',{className:'row'});
     if(I.kind==='melodic'){
@@ -861,6 +866,15 @@ function syncControls(){
 function init(){
   const key=$('#key');key.append(h('option',{value:'auto',textContent:'Auto'}));NOTE_NAMES.forEach((n,i)=>key.append(h('option',{value:String(i),textContent:n})));
   wireBoard($('#board'));
+  $('#plusBtn').onclick=openPicker;
+  const pk=$('#pickList');for(const k of CHIPS)pk.append(h('button',{className:'pick',style:'--c:'+INST[k].color,onclick:()=>{$('#picker').close();if(R.state==='idle')addTrack(k);}},
+    h('b',{},INST[k].chip||INST[k].name),h('small',{},PICK_NOTE[k]||'')));
+  // leaving the app (home button, app switcher, closing the tab) stops the sound and the microphone
+  const quiet=()=>{if(R.state==='armed'||R.state==='recording')cancelRec('Recording stopped because the app went to the background.');
+    if(T.playing)stopTransport();
+    if(micStream){micStream.getTracks().forEach(t=>t.stop());try{micSrc.disconnect();}catch(e){}micStream=null;}
+    if(ctx&&ctx.state==='running')ctx.suspend().catch(()=>{});};
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)quiet();});window.addEventListener('pagehide',quiet);
   try{const s=localStorage.getItem('melodeas.v1');if(s)restore(JSON.parse(s));}catch(e){}
   pruneEmpty();syncControls();renderTracks();
 

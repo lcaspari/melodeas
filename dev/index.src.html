@@ -86,23 +86,27 @@ meter{width:120px;height:12px}
 
 /* instrument bar */
 .bar{border-top:1px solid var(--line)}
-.chips{display:flex;gap:8px;overflow-x:auto;padding-top:8px;padding-bottom:8px;scrollbar-width:none}
+.chips{display:flex;align-items:center;gap:8px;overflow-x:auto;padding-top:10px;padding-bottom:10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;height:36px;border-radius:18px;border:2px solid var(--c);background:none;color:var(--text);padding:0 14px;font-size:14px;font-weight:600;white-space:nowrap}
-.chip:hover{background:color-mix(in srgb,var(--c) 22%,transparent)}
-.chip.has{background:var(--c);color:#1C1C1C}
-.chip.has:hover{background:var(--c)}
+.appbar .barin{height:auto;justify-content:flex-start;gap:8px}
+.barin .chips{flex:1;min-width:0}
+.chips::after{content:"";flex:none;width:4px}
+.chip{position:relative;flex:none;height:36px;border-radius:18px;border:2px solid var(--c);background:var(--c);color:#1C1C1C;padding:0 14px;font-size:14px;font-weight:700;white-space:nowrap;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .chip.on{box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--text)}
+.chip.muted{background:none;color:var(--soft);border-color:var(--line);text-decoration:line-through}
+.chip.quiet:not(.muted){opacity:.45}
+.chip .badge{position:absolute;top:-7px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--text);color:#1C1C1C;font-size:11px;font-weight:800;display:grid;place-items:center;text-decoration:none}
+.chip.all{--c:var(--line);background:none;color:var(--text);font-weight:600}
+.chip.all[aria-pressed=true]{background:var(--text);border-color:var(--text);color:#1C1C1C}
+.chip.plus{--c:var(--soft);background:none;color:var(--text);width:36px;padding:0;font-size:22px;font-weight:500;line-height:1;border-style:dashed}
+.chip.plus:hover{background:var(--panel)}
 .bar.nudge .chips{animation:nudge .5s 2}
 @keyframes nudge{50%{transform:translateX(6px)}}
 
 /* board and the panel of the selected instrument */
 .board{position:absolute;inset:0;background:var(--lane)}
 canvas.lane{position:absolute;inset:0;width:100%;height:100%;cursor:pointer;touch-action:pan-y}
-.panel.mix{border-top-color:var(--line)}
-.mixl{font-size:12.5px;color:var(--soft);margin-right:4px}
-.mixb{height:32px;border-radius:16px;border:2px solid var(--c);background:var(--c);color:#1C1C1C;font-size:13px;font-weight:700;padding:0 12px}
-.mixb[aria-pressed=false]{background:none;color:var(--soft);text-decoration:line-through;border-color:var(--line)}
 .panel{border-top:3px solid var(--c);border-bottom:1px solid var(--line);padding:8px max(16px,env(safe-area-inset-right,0px)) 8px max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:7px;max-height:42vh;max-height:42dvh;overflow-y:auto}
 .th .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .tn{font-weight:700;font-size:15px;margin-right:6px}
@@ -149,8 +153,14 @@ dialog .icon{margin-right:-10px}
 .mgroup .link{display:flex;justify-content:center;margin-top:8px}
 .keys{color:var(--soft);font-size:13px;line-height:1.5;margin:14px 0 0}
 
-#settings{margin:auto;width:min(560px,100%);max-height:min(86vh,86dvh);border-radius:20px;overflow-y:auto}
-#settings[open]{animation:fromBottom .2s ease-out}
+#settings,#picker{margin:auto;width:min(560px,100%);max-height:min(86vh,86dvh);border-radius:20px;overflow-y:auto}
+#picker{width:min(480px,100%)}
+.picks{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px}
+.pick{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:0;border-left:6px solid var(--c);border-radius:10px;background:var(--lane);padding:10px 12px;color:var(--text)}
+.pick:hover{background:#262626}
+.pick b{font-size:15px}
+.pick small{font-size:12.5px;color:var(--soft)}
+#settings[open],#picker[open]{animation:fromBottom .2s ease-out}
 @keyframes fromBottom{from{transform:translateY(30px);opacity:0}}
 .sec{margin:6px 0 0;font-size:13px;font-weight:700;color:var(--soft)}
 .srow{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px 14px;padding:11px 0;border-top:1px solid var(--line)}
@@ -163,8 +173,8 @@ dialog .icon{margin-right:-10px}
 .srow+.sec{margin-top:16px}
 
 @media (max-width:720px){
-  #settings{margin:auto 0 0;width:100%;border-radius:20px 20px 0 0;max-height:90vh;max-height:90dvh}
-  #settings[open]{animation-name:fromBottom}
+  #settings,#picker{margin:auto 0 0;width:100%;border-radius:20px 20px 0 0;max-height:90vh;max-height:90dvh}
+  #settings[open],#picker[open]{animation-name:fromBottom}
   .ctl{gap:8px}
   .play,.tempo{min-width:84px}
 }
@@ -181,7 +191,7 @@ dialog .icon{margin-right:-10px}
 }
 @media (prefers-reduced-motion:reduce){
   .rec[data-state=armed] .dot,.bar.nudge .chips{animation:none}
-  #menu[open],#settings[open]{animation:none}
+  #menu[open],#settings[open],#picker[open]{animation:none}
 }
 </style>
 </head>
@@ -194,11 +204,11 @@ dialog .icon{margin-right:-10px}
     </div>
     <button class="icon" id="menuBtn" aria-label="Menu" aria-haspopup="dialog"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
-  <nav class="bar" id="add" aria-label="Instruments"><div class="inner chips" id="chips"></div></nav>
+  <nav class="bar" id="add" aria-label="Instruments"><div class="inner barin"><div class="chips" id="chips"></div><button class="chip plus" id="plusBtn" aria-label="Add an instrument" title="Add an instrument">+</button></div></nav>
 </header>
 
 <main>
-  <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>Pick an instrument at the top, press the red button, and perform one round of the loop.</p>
+  <p class="empty" id="empty"><strong>Sing it or beatbox it. It comes back as an instrument.</strong>Tap + at the top to add an instrument, press the red button, and perform one round of the loop.</p>
   <div class="board hide" id="boardBox"><canvas id="board" class="lane"></canvas></div>
 </main>
 
@@ -238,7 +248,8 @@ dialog .icon{margin-right:-10px}
       <a class="link paypal" href="https://paypal.me/LucaCaspari" target="_blank" rel="noopener">PayPal</a>
       <a class="link coffee" href="https://buymeacoffee.com/lcaspari" target="_blank" rel="noopener">Buy me a coffee</a>
     </div>
-    <p class="keys">Editing: select an instrument, then drag a note to move it, drag its right edge to change its length, double-tap it to remove it, double-tap an empty spot to add one. Tap a drum hit to switch drum.</p>
+    <p class="keys">Instruments at the top: tap one to bring it to the front, tap it again to mute it, hold it to solo it. “All” shows every instrument; + adds one.</p>
+    <p class="keys">Editing: select an instrument, then drag a note or drum hit to move it, drag its right edge to change its length, double-tap it to remove it, double-tap an empty spot to add one.</p>
     <p class="keys">Zoom: pinch the board with two fingers, or hold Ctrl and scroll. Drag an empty spot or scroll to move left and right.</p>
     <p class="keys">On a computer: Space plays and stops, R records.</p>
   </div>
@@ -266,6 +277,13 @@ dialog .icon{margin-right:-10px}
     <label class="srow"><span>Mic sensitivity</span><select id="sens"><option value="0.6">Low (noisy room)</option><option value="1">Normal</option><option value="1.8">High (quiet voice)</option></select></label>
     <div class="srow"><span>Timing offset, ms</span><div><input type="number" id="lat" min="0" max="500" step="1" placeholder="auto"><button class="btn" id="latAuto">Auto</button><button class="btn" id="calib">Measure with speakers</button></div></div>
     <p class="note" id="latNote">The timing offset is how long sound takes to leave the speakers and come back through the mic. If your notes land late or early against the click, measure it once: turn the speakers up and press “Measure with speakers”.</p>
+  </div>
+</dialog>
+
+<dialog id="picker" aria-label="Add an instrument">
+  <div class="box">
+    <div class="dh"><h2>Add an instrument</h2><button class="icon" data-close aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="picks" id="pickList"></div>
   </div>
 </dialog>
 

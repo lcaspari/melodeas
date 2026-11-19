@@ -3,8 +3,8 @@ from playwright.async_api import async_playwright
 SETUP="""async(nofreeze)=>{ window.melodeasNoFreeze=nofreeze; const m=window.melodeas;
   const mk=(inst,notes)=>{m.addTrack(inst);const t=m.S.tracks[m.S.tracks.length-1];t.lenBeats=8;t.notes=notes;return t;};
   const mel=(p0)=>Array.from({length:16},(_,i)=>({t:i*0.5,d:0.45,p:p0+[0,3,7,10][i%4],v:100}));
-  mk('kicksnare',Array.from({length:8},(_,i)=>({t:i,drum:i%2?'snare':'kick',v:110})));
-  mk('hat',Array.from({length:16},(_,i)=>({t:i*0.5,drum:'hat',v:90})));
+  mk('kit',Array.from({length:8},(_,i)=>({t:i,drum:i%2?'snare':'kick',v:110})));
+  mk('kit',Array.from({length:16},(_,i)=>i===5?{t:i*0.5,drum:'ohat',d:1.5,v:90}:{t:i*0.5,drum:'hat',v:90}));
   mk('bass',mel(45));mk('synth1',mel(57));mk('pad',mel(60));mk('epiano',mel(64));mk('brass',mel(62));mk('synth2',mel(69));
   m.invalidate();m.renderTracks(); }"""
 RMS="""async(sec)=>{ const m=window.melodeas,a=m.ctx.createAnalyser();a.fftSize=2048;m.musicBus.connect(a);const b=new Float32Array(2048);let s=0,n=0;const t1=performance.now()+sec*1000;

@@ -106,24 +106,33 @@ function labelDrums(hits,mode,known){
     const km=kmeans1d(v,k);let g=[];
     for(let j=0;j<k;j++){const idx=[];for(let i=0;i<v.length;i++)if(km.asg[i]===j)idx.push(i);if(idx.length)g.push({mean:km.c[j],idx});}
     g.sort((a,b)=>a.mean-b.mean);
-    let ok=true;for(let j=1;j<g.length;j++)if(g[j].mean-g[j-1].mean<0.7)ok=false;
+    // split only where the sounds really fall apart: centres 0.7 octave apart and a clear gap between the groups
+    let ok=true;for(let j=1;j<g.length;j++){const hiPrev=Math.max(...g[j-1].idx.map(i=>v[i])),loNext=Math.min(...g[j].idx.map(i=>v[i]));
+      if(g[j].mean-g[j-1].mean<0.7||loNext-hiPrev<0.6)ok=false;}
     if(ok||k===1)groups=g;
   }
-  const lab=groups.map(g=>{
+  const rule=groups.map(g=>{
     const m=g.mean;let near=-1,nd=0.6,lb=0,ub=K-1;
     for(let c=0;c<K;c++){if(!kn[c])continue;const kc=ks[c]/kn[c],d=Math.abs(m-kc);
       if(d<nd){nd=d;near=c;}
       if(m>kc+0.6)lb=Math.max(lb,Math.min(K-1,c+1));if(m<kc-0.6)ub=Math.min(ub,Math.max(0,c-1));}
-    if(near>=0)return near;
-    // one kind of sound on a kick + snare track with nothing to compare against: assume kick unless it is clearly bright
-    const a=(K===2&&groups.length===1&&!anyKnown)?(m<L(2600)?0:1):abs(m);
-    return lb<=ub?clamp(a,lb,ub):a;
+    return {m,near,lb,ub};
   });
-  for(let i=1;i<lab.length;i++)if(lab[i]<=lab[i-1]){
-    if(lab[i-1]<K-1)lab[i]=lab[i-1]+1;
-    else{lab[i]=K-1;for(let j=i-1;j>=0;j--)if(lab[j]>=lab[j+1])lab[j]=lab[j+1]-1;}
+  let lab;
+  if(groups.length===1){const r=rule[0];
+    if(r.near>=0)lab=[r.near];
+    else{ // one kind of sound and nothing to compare against: kick unless it is clearly bright
+      const a=!anyKnown?(r.m<L(2600)?0:K===3&&r.m>=L(4200)?2:1):abs(r.m);lab=[r.lb<=r.ub?clamp(a,r.lb,r.ub):a];}
+  }else{ // several groups: the brighter group is the higher drum; pick the order that best fits typical sounds and the references
+    const proto=[L(900),L(3000),L(8000)];let best=null,bc=1e9;
+    const walk=(gi,from,acc,cost)=>{if(cost>=bc)return;if(gi===groups.length){bc=cost;best=acc.slice();return;}
+      for(let c=from;c<=K-(groups.length-gi);c++){const r=rule[gi];
+        const cc=r.near>=0?(c===r.near?0:4):Math.abs(r.m-proto[c])+(c<r.lb||c>r.ub?3:0);
+        acc.push(c);walk(gi+1,c+1,acc,cost+cc);acc.pop();}};
+    walk(0,0,[],0);lab=best;
   }
   groups.forEach((g,gi)=>g.idx.forEach(i=>hits[i].drum=names[lab[gi]]));
+  if(K===3)for(const h of hits)if(h.drum==='hat'&&h.dur>0.16)h.drum='ohat'; // a held "tsss" is an open hat
   return vel();
 }
 

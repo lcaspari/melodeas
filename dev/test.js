@@ -63,6 +63,20 @@ let fails = 0; const check = (name, ok, extra) => { console.log((ok ? 'PASS ' : 
   check('silence gives nothing (melody)', D.analyse({ mode: 'melodic', x: mix(2, []), sr, sens: 1 }).events.length === 0);
 }
 
+// --- 4a. one Drums instrument (mode 'kit') works out by itself which drums are in a take
+{
+  const one=k=>D.analyse({mode:'kit',x:mix(2,[{t:0.3,k,a:0.5},{t:0.8,k,a:0.5},{t:1.3,k,a:0.4}]),sr,sens:1}).events;
+  check('drums: only "p" -> kick',one('kick').every(h=>h.drum==='kick'),one('kick').map(h=>h.drum).join(' '));
+  check('drums: only "ts" -> hat',one('hat').every(h=>h.drum==='hat'),one('hat').map(h=>h.drum).join(' '));
+  const ev=[{t:0.2,k:'kick',a:0.5},{t:0.45,k:'hat',a:0.4},{t:0.7,k:'snare',a:0.5},{t:0.95,k:'ohat',a:0.5},{t:1.5,k:'kick',a:0.5}];
+  const r=D.analyse({mode:'kit',x:mix(2.4,ev),sr,sens:1}).events;
+  check('drums: kick, hat, snare, open hat in one take',r.length===5&&r.every((h,i)=>h.drum===ev[i].k),r.map(h=>h.drum+':'+h.d.toFixed(2)).join(' '));
+  check('drums: open hat keeps its length',r[3]&&r[3].d>0.25,r[3]&&r[3].d.toFixed(2));
+  const x=place(2.4,[[0.3,pBurst(0.5)],[0.8,pBurst(0.5)],[1.3,pBurst(0.4)],[1.8,pBurst(0.5)]]);
+  const rp=D.analyse({mode:'kit',x,sr,sens:1}).events;
+  check('drums: breathy "p" only -> kick (not hat)',rp.every(h=>h.drum!=='hat'&&h.drum!=='ohat'),rp.map(h=>h.drum).join(' '));
+}
+
 // --- 4b. a breathy "p": mostly low thump plus some hiss. Used to come out as snare.
 function pBurst(amp){const n=Math.round(sr*0.2),x=new Float32Array(n),nz=new Float32Array(n);
   for(let i=0;i<n;i++)nz[i]=rnd()*Math.exp(-i/(sr*0.015));

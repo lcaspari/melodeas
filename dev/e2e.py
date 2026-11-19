@@ -30,6 +30,9 @@ async def close_dlg(page):
 async def menu_do(page,sel):
     await page.click('#menuBtn'); await page.wait_for_selector('#menu[open]'); await page.click(sel); await page.wait_for_timeout(150)
 
+async def add_inst(page,name):
+    await page.click('.chip.plus'); await page.wait_for_selector('#picker[open]'); await page.click(f'.pick:has-text("{name}")'); await page.wait_for_timeout(150)
+
 async def wait_state(page, st, timeout=30000):
     await page.wait_for_function("s => window.melodeas.R.state===s", arg=st, timeout=timeout)
 async def main():
@@ -47,7 +50,7 @@ async def main():
         if NOWL: await page.evaluate('window.melodeasNoWorklet=true')
         await page.screenshot(path='shot-empty.png', full_page=True)
         # ---- 1. kick+snare, following the click
-        await page.click('text=Kick + snare'); await open_settings(page); await page.fill('#lat','0'); await page.dispatch_event('#lat','change'); await close_dlg(page)
+        await add_inst(page,'Drums'); await open_settings(page); await page.fill('#lat','0'); await page.dispatch_event('#lat','change'); await close_dlg(page)
         await page.click('#rec'); await wait_state(page,'armed')
         pat=[(0,'kick',.6),(1,'kick',.3),(2,'snare',.6),(3.5,'kick',.6),(4,'kick',.6),(5,'kick',.5),(6,'snare',.6),(6.75,'snare',.25),(7.5,'kick',.5)]
         await page.evaluate("pat => { const m=window.melodeas, sp=60/m.S.bpm; for(const [b,k,a] of pat) window.__burst(k, m.R.tStart+b*sp, a); }", pat)
@@ -63,7 +66,7 @@ async def main():
             check('drum take: labels', [n['drum'] for n in notes]==[q[1] for q in pat], ''.join(n['drum'][0] for n in notes))
             check('drum take: velocity', notes[1]['v']<notes[0]['v'] and notes[7]['v']<notes[6]['v'], [n['v'] for n in notes])
         # ---- 2. bass over the playing loop
-        await page.click('.chip:has-text("Bass")')
+        await add_inst(page,'Bass')
         await page.click('#rec'); await wait_state(page,'armed')
         mel=[(0,1.5,45),(2,1,48),(3,1,50),(4,1.5,52),(6,0.5,52),(6.5,0.5,52),(7,1,43)]
         await page.evaluate("mel => { const m=window.melodeas, sp=60/m.S.bpm; for(const [b,d,p] of mel) window.__sing(p, m.R.tStart+b*sp, d*sp*0.9, 0.4); }", mel)
@@ -95,7 +98,7 @@ async def main():
         check('mix export produces a WAV', bool(n) and n.endswith('.wav'), n)
 
         # ---- 4a. second take on the drum track adds to the first
-        await page.click('.chip:has-text("Kick + snare")')
+        await page.click('.chip:has-text("Drums")')
         await page.click('#rec'); await wait_state(page,'armed')
         await page.evaluate("()=>{ const m=window.melodeas, sp=60/m.S.bpm; window.__burst('snare', m.R.tStart+1.5*sp, 0.5); window.__burst('snare', m.R.tStart+5.5*sp, 0.5); }")
         await wait_state(page,'idle')
@@ -130,7 +133,7 @@ async def main():
         # ---- 5. free first take sets tempo
         page.on('dialog', lambda d: asyncio.ensure_future(d.accept()))
         await page.click('#play'); await menu_do(page,'#clearAll')
-        await open_settings(page); await page.click('[data-first=free]'); await close_dlg(page); await page.click('.chip:has-text("Hi-hat")')
+        await open_settings(page); await page.click('[data-first=free]'); await close_dlg(page); await add_inst(page,'Drums')
         await page.click('#rec'); await wait_state(page,'recording')
         await page.evaluate("()=>{ const m=window.melodeas; window.__t0=m.ctx.currentTime+0.4; for(let i=0;i<8;i++) window.__burst(i===3?'ohat':'hat', window.__t0+i*0.5, 0.5); }")
         await page.wait_for_function("window.melodeas.ctx.currentTime >= window.__t0+4.0-0.012")
@@ -140,7 +143,7 @@ async def main():
         check('free take: tempo found', r['bars']==2 and abs(r['bpm']-120)<=2 and r['playing'], f"{r['bars']} bars {r['bpm']} bpm  status: {st}")
         check('free take: 8 hats, one open', len(r['notes'])==8 and r['notes'][3]['drum']=='ohat' and max(abs(n['t']-i) for i,n in enumerate(r['notes']))<0.08, ' '.join(f"{n['drum']}@{n['t']:.2f}" for n in r['notes']))
         # ---- 6. voice track
-        await page.click('.chip:has-text("Voice")'); await page.click('#rec'); await wait_state(page,'armed')
+        await add_inst(page,'Voice'); await page.click('#rec'); await wait_state(page,'armed')
         await page.evaluate("()=>{ const m=window.melodeas; window.__sing(57, m.R.tStart+0.2, 1.0, 0.4); }")
         await wait_state(page,'idle')
         v = await page.evaluate("(()=>{const t=window.melodeas.S.tracks[1]; return t.audio?{n:t.audio.data.length,sr:t.audio.sr,len:t.lenBeats}:null})()")
@@ -152,17 +155,37 @@ async def main():
         await wait_state(page,'idle'); st = await page.inner_text('#status')
         check('voice overdub layers', 'on top' in st, st)
         await page.click('#play'); await menu_do(page,'#clearAll'); await open_settings(page); await page.click('[data-first=metronome]'); await close_dlg(page)
-        await page.click('text=Kick + snare'); await page.click('#rec'); await wait_state(page,'armed')
+        await add_inst(page,'Drums'); await page.click('#rec'); await wait_state(page,'armed')
         await page.evaluate("()=>{ const m=window.melodeas, sp=60/m.S.bpm; for(const b of [0,2,4,6]) window.__burst('p', m.R.tStart+b*sp, 0.5); }")
         await wait_state(page,'idle')
         notes = await page.evaluate("window.melodeas.S.tracks[0].notes")
         check('only "p" sounds: all four are kicks', len(notes)==4 and all(n['drum']=='kick' for n in notes), ' '.join(f"{n['drum']}@{round(2**n['f'])}Hz" for n in notes))
-        # correct one to snare by clicking it: later takes of that sound follow the correction
-        g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2}}")
-        g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2}}")
+        # drag one up a row to snare: the drum changes, the correction is remembered, and the rendered loop follows (this used to be ignored)
+        g = await page.evaluate("()=>{const tr=window.melodeas.S.tracks[0]; const r=tr.cv.getBoundingClientRect(), q=tr.rects[0]; return {x:r.left+q.x+q.w/2,y:r.top+q.y+q.h/2,rh:tr.geom.rh}}")
         await page.wait_for_timeout(400); await page.mouse.click(g['x'],g['y'])
-        r = await page.evaluate("({d:window.melodeas.S.tracks[0].notes[0].drum,l:window.melodeas.S.learned.length})")
-        check('click switches kick to snare and is remembered', r['d']=='snare' and r['l']==1, r)
+        r = await page.evaluate("window.melodeas.S.tracks[0].notes[0].drum")
+        check('a click on a drum hit does not switch it', r=='kick', r)
+        await page.mouse.move(g['x'],g['y']); await page.mouse.down(); await page.mouse.move(g['x'],g['y']-g['rh'],steps=6); await page.mouse.up()
+        await page.click('#play'); await page.wait_for_timeout(1500)
+        r = await page.evaluate("(()=>{const m=window.melodeas,t=m.S.tracks[0];return {d:t.notes[0].drum,l:m.S.learned.length,fz:!!(t.frozen&&t.frozen.key.includes('snare'))}})()")
+        check('drag kick to snare: changed, remembered, and heard', r['d']=='snare' and r['l']==1 and r['fz'], r)
+        # ---- 6. instrument bar: tap the selected one to mute, hold to solo, + adds a second of the same kind
+        await page.click('.chip:has-text("Drums")'); await page.wait_for_timeout(100)
+        r = await page.evaluate("window.melodeas.S.tracks[0].mute")
+        check('tap on the selected instrument mutes it', r is True, r)
+        await page.click('.chip:has-text("Drums")'); ch = await page.query_selector('.chip:has-text("Drums")'); bb = await ch.bounding_box()
+        await page.mouse.move(bb['x']+bb['width']/2,bb['y']+bb['height']/2); await page.mouse.down(); await page.wait_for_timeout(650); await page.mouse.up(); await page.wait_for_timeout(100)
+        r = await page.evaluate("(()=>{const t=window.melodeas.S.tracks[0];return [t.mute,t.solo]})()")
+        check('tap again unmutes, hold solos', r==[False,True], r)
+        await add_inst(page,'Drums'); r = await page.evaluate("[window.melodeas.S.tracks.length,[...document.querySelectorAll('.chip.has')].map(c=>c.textContent)]")
+        check('+ adds a second drum instrument', r[0]==2 and 'Drums 2' in r[1], r)
+        await page.click('.chip.all'); r = await page.evaluate("[window.melodeas.S.tracks.length,window.melodeas.S.sel]")
+        check('leaving an empty instrument removes it', r==[1,None], r)
+        # ---- 7. the app going to the background stops the sound
+        await page.evaluate("()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));}")
+        await page.wait_for_timeout(300); r = await page.evaluate("[window.melodeas.T.playing,window.melodeas.ctx.state]")
+        check('hidden app: playback stops, audio suspended', r==[False,'suspended'], r)
+        await page.evaluate("()=>{delete document.hidden;}")
         await page.wait_for_timeout(400); await page.screenshot(path='shot-final.png', full_page=True)
         await page.set_viewport_size({'width':390,'height':800}); await page.wait_for_timeout(300); await page.screenshot(path='shot-mobile.png', full_page=True)
         check('no console errors', not errs, errs[:5])

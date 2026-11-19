@@ -20,25 +20,23 @@ https://melodeas.net, served over https, so the microphone works in every browse
 
 ## Use
 
-1. Tap an instrument in the bar at the top. It is added and comes to the front.
+1. Tap + at the top and pick an instrument. It is added and comes to the front.
 2. Press the red button. You get a one-bar count-in, then one round of the loop to perform.
-3. The take is converted and starts looping. Tap the next instrument and repeat. Recording again into an instrument adds to what is already there; "Clear" empties it and "Undo last change" in the menu steps back.
+3. The take is converted and starts looping. Add the next instrument and repeat. Recording again into an instrument adds to what is already there; "Clear" empties it and "Undo last change" in the menu steps back.
 4. "Export MIDI" in the menu writes a `.mid` with one track per instrument, tempo and velocities.
 
-All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, mute, volume) between the board and the record bar; the others are grey behind it. Tap the selected instrument again to see everything in colour. An instrument you leave with nothing recorded in it is removed again.
+All instruments share one board: melodies on a piano roll, drums in rows below, voice as a waveform on top. The selected instrument is shown in its colour in front, with its controls (sound, octave, EQ, volume) between the board and the record bar; the others are grey behind it. Tap "All" to see everything in colour. An instrument you leave with nothing recorded in it is removed again.
 
 **Zoom and scroll:** pinch the board with two fingers or hold Ctrl and scroll to zoom; drag an empty spot or scroll to move left and right.
 
-**Mixer:** with no instrument selected, the bar above the record button lists the recorded instruments. Tap one to mute it, tap again to bring it back.
+**Instrument bar:** shows only the instruments you added, plus "All" for the overview and + to add another (the same kind can be added more than once). Tap an instrument to bring it to the front; tap it again to mute it, and once more to unmute. Hold it (or right-click, or Shift-click) to solo it. Muted instruments are struck through, a soloed one carries an "S".
  On the piano roll every instrument is drawn in the same octave, so a bass two octaves below the keys does not stretch the view; octaves only count inside one instrument, and the C labels show the octave of the selected one.
 
 What to perform:
 
 | Track | What to do |
 | --- | --- |
-| Kick + snare | "p" or "b" for kick, "k" for snare |
-| Hi-hat | "ts ts"; a long "tsss" becomes an open hat |
-| Full kit | "p", "k" and "ts" in one take |
+| Drums | "p" or "b" for kick, "k" for snare, "ts" for hat; a held "tsss" becomes an open hat as long as you hold it. It works out by itself which drums are in a take |
 | Toms | "dum dum" at different pitches; higher and lower sounds become higher and lower toms |
 | Bass, Lead, Pluck, Keys, Pad, Brass | sing or hum, one note at a time |
 | Voice | recorded as audio, not converted |
@@ -60,7 +58,7 @@ Select an instrument to see its controls. All sounds are synthesised in the brow
 
 ## Editing notes
 
-In the selected instrument: drag a note to move it in time and pitch (or between drums), drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Clicking a drum hit switches the drum.
+In the selected instrument: drag a note to move it in time and pitch (or between drums), drag its right edge to change its length, double-click it to remove it, double-click an empty spot to add one. Drag a drum hit up or down to change the drum, and drag the end of an open hat to change its length.
 
 "Snap timing to" and "Snap pitch to" can be changed after recording; the original performance is kept.
 
@@ -70,7 +68,7 @@ In the selected instrument: drag a note to move it in time and pitch (or between
 - **Speakers:** in "Speakers" mode the loop is turned down while recording and the browser's echo cancelling is switched on. "Headphones" turns both off and gives the cleanest detection.
 - **Timing offset:** sound takes time to leave the speakers and return through the mic. The page estimates this; "Measure with speakers" in Settings measures it properly.
 - **Detection:** onsets come from spectral flux, drums are sorted by brightness (dark = kick, mid = snare, bright = hat), pitch comes from the YIN algorithm. Velocity follows how loud each hit or note was.
-- **Kick or snare:** a take with only one kind of sound on a Kick + snare track is read as kick unless it is clearly bright. A second take is compared with the hits already on the track. When you correct a hit, that sound is remembered and later takes follow the correction.
+- **Kick or snare:** a take with only one kind of sound is read as kick unless it is clearly bright (then snare, or hat if very bright). A take only splits into several drums where the sounds clearly fall apart in brightness. A second take is compared with the hits already on the track. When you correct a hit, that sound is remembered and later takes follow the correction.
 - **Each track keeps its own length**, so a 1-bar beat keeps repeating under a 4-bar bass line if you change "Loop length" between takes.
 - **Playback:** each instrument track is rendered once into an audio buffer and looped, so many tracks play smoothly. Editing a track re-renders just that track in the background.
 
@@ -79,6 +77,7 @@ In the selected instrument: drag a note to move it in time and pitch (or between
 - One note at a time per melodic track (no chords).
 - Voice tracks are audio: they are not in the MIDI file (use the WAV button on the track), and the autosave in the browser does not keep them. "Save project" does.
 - Changing the tempo after recording a voice track plays it faster or slower, like tape.
+- Leaving the app (home button, switching apps, locking the phone) stops playback and recording and releases the microphone.
 
 ## Support
 
